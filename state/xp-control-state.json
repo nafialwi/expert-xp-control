@@ -4,7 +4,7 @@
     "last_active": "segeran-jiwa-pos-next",
     "projects": {
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-11T16:34:27.338815+00:00",
+        "last_active_at": "2026-09-11T16:52:38.797423+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -56,24 +56,22 @@
       "updated_at": "2026-09-11T15:42:46.262594+00:00"
     },
     {
-      "created_at": "2026-09-11T16:34:33.733317+00:00",
+      "created_at": "2026-09-11T16:52:42.910967+00:00",
       "metadata": {
-        "_last_stage": "WAITING_GPT",
+        "_last_stage": "PACKAGE_VALIDATED",
         "base_fingerprint": "96b8f2845003a1495ba5780bd0b24438a83993709dfa827a1f38892ca881ffb7",
         "branch": "work/cs06743-patch3-hardening",
-        "failure_message": "Paket XP tidak cocok dengan kondisi project.",
         "head": "76d359c1bf56bb292b2d1bf8d898892dfaa8658b",
-        "incident_challenge": "d09ff8b6dc577672b985d8a2a89df600",
-        "incident_id": "INC-8A410622",
-        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-75dca6bc/package.zip",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942/package.zip",
+        "remote_lease": "ACTIVE",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
       },
       "milestone": "CS-05-DESIGN-SPEC",
       "project_id": "segeran-jiwa-pos-next",
-      "run_id": "segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-75dca6bc",
-      "stage": "WAITING_GPT",
+      "run_id": "segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942",
+      "stage": "PACKAGE_VALIDATED",
       "state_version": 1,
-      "updated_at": "2026-09-11T16:34:33.747663+00:00"
+      "updated_at": "2026-09-11T16:52:46.223950+00:00"
     }
   ]
 }
