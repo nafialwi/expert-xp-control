@@ -58,10 +58,18 @@
     {
       "created_at": "2026-09-11T16:52:42.910967+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "WAITING_GPT",
         "base_fingerprint": "96b8f2845003a1495ba5780bd0b24438a83993709dfa827a1f38892ca881ffb7",
         "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "docs/blueprint/CS-05_DESIGN_SPEC.md",
+          "docs/blueprint/15_WORKFLOW_PROFILE.md"
+        ],
+        "control_sync": "CLEAR",
+        "failure_message": "Source verification gagal.",
         "head": "76d359c1bf56bb292b2d1bf8d898892dfaa8658b",
+        "incident_challenge": "f0311adc7899886599d9047ed7baaa1c",
+        "incident_id": "INC-C8F46D13",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942/package.zip",
         "remote_lease": "ACTIVE",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
@@ -69,9 +77,9 @@
       "milestone": "CS-05-DESIGN-SPEC",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-11T16:52:46.223950+00:00"
+      "updated_at": "2026-09-11T16:53:11.056344+00:00"
     }
   ]
 }
