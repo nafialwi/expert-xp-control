@@ -1,0 +1,4725 @@
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/__init__.py #####
+__version__ = "2.0.0-rc6"
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/adapters/base.py #####
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+
+
+class AdapterError(RuntimeError):
+    pass
+
+
+class CapabilityAdapter(ABC):
+    @abstractmethod
+    def capabilities(self) -> set[str]:
+        raise NotImplementedError
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/adapters/git.py #####
+from __future__ import annotations
+
+import hashlib
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+from .base import AdapterError, CapabilityAdapter
+
+
+
+
+@dataclass(frozen=True)
+class GitSafepointResult:
+    head: str
+    committed: bool
+    pushed: bool
+    branch: str | None
+
+
+@dataclass(frozen=True)
+class GitState:
+    branch: str | None
+    head: str
+    dirty: bool
+    ahead: int = 0
+    behind: int = 0
+    diverged: bool = False
+    remote: str | None = None
+    upstream: str | None = None
+    fetch_checked: bool = False
+    fetch_ok: bool | None = None
+    fetch_error: str | None = None
+
+
+class GitAdapter(CapabilityAdapter):
+    def __init__(self, repo: Path):
+        self.repo = Path(repo)
+
+    def capabilities(self) -> set[str]:
+        return {"git-state", "git-fingerprint", "git-fetch", "git-push"}
+
+    def _run(self, *args: str, check: bool = True) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=self.repo, text=True, capture_output=True
+        )
+        if check and result.returncode != 0:
+            raise AdapterError(result.stderr.strip() or "git command failed")
+        return result.stdout.strip()
+
+    def state(self, fetch: bool = True) -> GitState:
+        fetch_checked = bool(fetch)
+        fetch_ok = None
+        fetch_error = None
+        if fetch:
+            result = subprocess.run(["git", "fetch", "--quiet"], cwd=self.repo, text=True, capture_output=True)
+            fetch_ok = result.returncode == 0
+            if not fetch_ok:
+                fetch_error = (result.stderr.strip() or result.stdout.strip() or "git fetch failed")
+        branch = self._run("branch", "--show-current") or None
+        head = self._run("rev-parse", "HEAD")
+        dirty = bool(self._run("status", "--porcelain"))
+        remote = self._run("remote", "get-url", "origin", check=False) or None
+        ahead = behind = 0
+        upstream = None
+        if branch:
+            upstream = self._run("rev-parse", "--abbrev-ref", "@{upstream}", check=False) or None
+            if upstream:
+                counts = self._run("rev-list", "--left-right", "--count", f"{upstream}...HEAD")
+                if counts:
+                    behind_s, ahead_s = counts.split()
+                    behind, ahead = int(behind_s), int(ahead_s)
+        return GitState(
+            branch=branch,
+            head=head,
+            dirty=dirty,
+            ahead=ahead,
+            behind=behind,
+            diverged=bool(ahead and behind),
+            remote=remote,
+            upstream=upstream,
+            fetch_checked=fetch_checked,
+            fetch_ok=fetch_ok,
+            fetch_error=fetch_error,
+        )
+
+    def source_fingerprint(self) -> str:
+        state = self.state(fetch=False)
+        marker = f"git:{state.head}"
+        return hashlib.sha256(marker.encode("utf-8")).hexdigest()
+
+    def working_fingerprint(self) -> str:
+        state = self.state(fetch=False)
+        diff = self._run("diff", "--binary", "HEAD", "--", check=False)
+        untracked = self._run("ls-files", "--others", "--exclude-standard", check=False)
+        pieces = [f"head={state.head}", diff]
+        for rel in sorted(filter(None, untracked.splitlines())):
+            path = self.repo / rel
+            if path.is_file():
+                pieces.append(f"untracked:{rel}:{hashlib.sha256(path.read_bytes()).hexdigest()}")
+            else:
+                pieces.append(f"untracked:{rel}:nonfile")
+        return hashlib.sha256("\n".join(pieces).encode("utf-8")).hexdigest()
+
+    def push_current_branch(self, *, remote: str = "origin") -> GitSafepointResult:
+        state = self.state(fetch=False)
+        if not state.branch:
+            raise AdapterError("Cannot push from detached HEAD")
+        head = self._run("rev-parse", "HEAD")
+        result = subprocess.run(
+            ["git", "push", "-u", remote, state.branch],
+            cwd=self.repo,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            raise AdapterError(result.stderr.strip() or result.stdout.strip() or "git push failed")
+        return GitSafepointResult(head=head, committed=False, pushed=True, branch=state.branch)
+
+    def create_safepoint(self, message: str, *, push: bool = True, remote: str = "origin") -> GitSafepointResult:
+        state = self.state(fetch=False)
+        if not state.branch:
+            raise AdapterError("Cannot create safepoint from detached HEAD")
+        committed = False
+        if state.dirty:
+            self._run("add", "-A")
+            result = subprocess.run(
+                ["git", "commit", "-m", message],
+                cwd=self.repo,
+                text=True,
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                raise AdapterError(result.stderr.strip() or result.stdout.strip() or "git commit failed")
+            committed = True
+        head = self._run("rev-parse", "HEAD")
+        pushed = False
+        if push:
+            result = subprocess.run(
+                ["git", "push", "-u", remote, state.branch],
+                cwd=self.repo,
+                text=True,
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                raise AdapterError(result.stderr.strip() or result.stdout.strip() or "git push failed")
+            pushed = True
+        return GitSafepointResult(head=head, committed=committed, pushed=pushed, branch=state.branch)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/adapters/node.py #####
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+from .base import CapabilityAdapter
+
+
+class BoundedCommandError(ValueError):
+    pass
+
+
+class NodeAdapter(CapabilityAdapter):
+    def __init__(self, repo: Path):
+        self.repo = Path(repo)
+        package_path = self.repo / "package.json"
+        if not package_path.exists():
+            raise BoundedCommandError("package.json not found")
+        data = json.loads(package_path.read_text(encoding="utf-8"))
+        self.scripts = set((data.get("scripts") or {}).keys())
+
+    def capabilities(self) -> set[str]:
+        return {"node-environment", "npm-script"}
+
+    def resolve_script(self, script: str) -> list[str]:
+        if script not in self.scripts:
+            raise BoundedCommandError(f"npm script not declared: {script}")
+        return ["npm", "run", script]
+
+    def run_script(self, script: str, timeout: int = 1800) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            self.resolve_script(script),
+            cwd=self.repo,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/adapters/postgresql.py #####
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import subprocess
+from urllib.parse import parse_qs, unquote, urlsplit
+from dataclasses import dataclass
+from pathlib import Path
+
+from .base import CapabilityAdapter
+from ..redaction import redact_text
+
+
+@dataclass(frozen=True)
+class PostgreSQLEnvironmentStatus:
+    psql_present: bool
+    database_url_present: bool
+    connection_checked: bool
+    connection_ok: bool | None
+    message: str
+
+
+@dataclass(frozen=True)
+class SQLExecutionResult:
+    applied: bool
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+_DESTRUCTIVE = re.compile(r"\b(DROP\s+(TABLE|SCHEMA|DATABASE|COLUMN)|TRUNCATE\b|DELETE\s+FROM\b)", re.I)
+_DATA_CHANGE = re.compile(r"\b(INSERT\s+INTO|UPDATE\b|DELETE\s+FROM|MERGE\b)\b", re.I)
+_SAFE_DDL = re.compile(r"\b(CREATE\s+(TABLE|VIEW|FUNCTION|SCHEMA|TYPE|SEQUENCE)|ALTER\s+TABLE\s+.*\bADD\b|CREATE\s+INDEX\b)\b", re.I | re.S)
+_NON_TRANSACTIONAL = re.compile(r"\b(CREATE\s+INDEX\s+CONCURRENTLY|DROP\s+INDEX\s+CONCURRENTLY|VACUUM\b|REINDEX\s+CONCURRENTLY)\b", re.I)
+_READ_ONLY = re.compile(r"^\s*(SELECT\b|WITH\b|EXPLAIN\b|SHOW\b)", re.I)
+
+
+def _libpq_environment(database_url: str) -> dict[str, str]:
+    """Convert a PostgreSQL URL to libpq environment variables.
+
+    Keeping credentials in the child environment avoids exposing the password
+    in the ``psql`` process command line / process listing.
+    """
+    parsed = urlsplit(database_url)
+    if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname:
+        raise ValueError("DATABASE_URL must be a postgresql:// URL")
+    env = dict(os.environ)
+    if parsed.hostname:
+        env["PGHOST"] = parsed.hostname
+    if parsed.port:
+        env["PGPORT"] = str(parsed.port)
+    if parsed.username is not None:
+        env["PGUSER"] = unquote(parsed.username)
+    if parsed.password is not None:
+        env["PGPASSWORD"] = unquote(parsed.password)
+    database = parsed.path.lstrip("/")
+    if database:
+        env["PGDATABASE"] = unquote(database)
+    query = parse_qs(parsed.query, keep_blank_values=False)
+    query_map = {
+        "sslmode": "PGSSLMODE",
+        "connect_timeout": "PGCONNECT_TIMEOUT",
+        "application_name": "PGAPPNAME",
+        "options": "PGOPTIONS",
+        "sslrootcert": "PGSSLROOTCERT",
+        "sslcert": "PGSSLCERT",
+        "sslkey": "PGSSLKEY",
+    }
+    for key, env_key in query_map.items():
+        values = query.get(key)
+        if values:
+            env[env_key] = values[-1]
+    return env
+
+
+def classify_sql(sql: str) -> str:
+    if _NON_TRANSACTIONAL.search(sql):
+        return "NON_TRANSACTIONAL"
+    if _DESTRUCTIVE.search(sql):
+        return "DESTRUCTIVE"
+    if _DATA_CHANGE.search(sql):
+        return "DATA_CHANGE"
+    if _SAFE_DDL.search(sql):
+        return "SAFE_DDL"
+    if _READ_ONLY.search(sql):
+        return "READ_ONLY"
+    return "UNKNOWN"
+
+
+class PostgreSQLAdapter(CapabilityAdapter):
+    def __init__(self, psql_bin: str = "psql"):
+        self.psql_bin = psql_bin
+
+    def capabilities(self) -> set[str]:
+        return {"postgresql-environment", "sql-classification", "psql-file"}
+
+    def environment_status(self, check_connection: bool = True) -> PostgreSQLEnvironmentStatus:
+        psql_present = (Path(self.psql_bin).exists() if "/" in self.psql_bin else shutil.which(self.psql_bin) is not None)
+        url_present = bool(os.environ.get("DATABASE_URL"))
+        if not check_connection:
+            return PostgreSQLEnvironmentStatus(psql_present, url_present, False, None, "not checked")
+        if not psql_present:
+            return PostgreSQLEnvironmentStatus(False, url_present, True, False, "psql not found")
+        if not url_present:
+            return PostgreSQLEnvironmentStatus(True, False, True, False, "DATABASE_URL missing")
+        try:
+            conn_env = _libpq_environment(os.environ["DATABASE_URL"])
+        except ValueError as exc:
+            return PostgreSQLEnvironmentStatus(True, True, True, False, str(exc))
+        try:
+            result = subprocess.run(
+                [self.psql_bin, "-X", "-v", "ON_ERROR_STOP=1", "-Atqc", "select 1"],
+                text=True,
+                capture_output=True,
+                timeout=30,
+                env=conn_env,
+            )
+        except subprocess.TimeoutExpired:
+            return PostgreSQLEnvironmentStatus(True, True, True, False, "connection timeout")
+        except OSError as exc:
+            return PostgreSQLEnvironmentStatus(True, True, True, False, redact_text(str(exc)))
+        message = redact_text(result.stderr.strip() or result.stdout.strip())
+        return PostgreSQLEnvironmentStatus(True, True, True, result.returncode == 0, message)
+
+    def apply_file(self, sql_file: Path, *, single_transaction: bool = True, timeout: int = 900) -> SQLExecutionResult:
+        if not os.environ.get("DATABASE_URL"):
+            return SQLExecutionResult(False, 2, "", "DATABASE_URL missing")
+        try:
+            conn_env = _libpq_environment(os.environ["DATABASE_URL"])
+        except ValueError as exc:
+            return SQLExecutionResult(False, 2, "", str(exc))
+        cmd = [self.psql_bin, "-X", "-v", "ON_ERROR_STOP=1"]
+        if single_transaction:
+            cmd.append("--single-transaction")
+        cmd += ["-f", str(Path(sql_file))]
+        try:
+            result = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout, env=conn_env)
+        except subprocess.TimeoutExpired:
+            return SQLExecutionResult(False, 124, "", f"psql timeout after {timeout}s")
+        except OSError as exc:
+            return SQLExecutionResult(False, 127, "", redact_text(str(exc)))
+        return SQLExecutionResult(
+            applied=result.returncode == 0,
+            returncode=result.returncode,
+            stdout=redact_text(result.stdout),
+            stderr=redact_text(result.stderr),
+        )
+
+    def run_test_file(self, sql_file: Path, *, timeout: int = 900) -> SQLExecutionResult:
+        return self.apply_file(sql_file, single_transaction=False, timeout=timeout)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/adapters/python_runtime.py #####
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+from .base import CapabilityAdapter
+
+
+class BoundedCommandError(ValueError):
+    pass
+
+
+class PythonAdapter(CapabilityAdapter):
+    def __init__(self, repo: Path | None = None, allowed_modules: set[str] | None = None):
+        self.repo = Path(repo) if repo is not None else None
+        self.allowed_modules = set(allowed_modules or {"unittest"})
+
+    def capabilities(self) -> set[str]:
+        return {"python-environment", "python-module"}
+
+    def resolve_module(self, module: str, args: list[str] | None = None) -> list[str]:
+        if module not in self.allowed_modules:
+            raise BoundedCommandError(f"python module not allowed: {module}")
+        return ["python", "-m", module, *(args or [])]
+
+    def run_module(self, module: str, args: list[str] | None = None, timeout: int = 1800) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            self.resolve_module(module, args),
+            cwd=self.repo,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/autopilot.py #####
+from __future__ import annotations
+
+import json
+import os
+import secrets
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from .adapters.base import AdapterError
+from .adapters.git import GitAdapter
+from .adapters.node import NodeAdapter
+from .adapters.postgresql import PostgreSQLAdapter, classify_sql
+from .adapters.python_runtime import PythonAdapter
+from .executor import PackageExecutor
+from .config import XPConfig
+from .control import ControlStateError, ControlStateManager, RemoteLeaseError, RemoteLeaseManager
+from .handoff import HandoffBuilder, HandoffContext
+from .journal import Journal
+from .locks import ProjectLock, ProjectLockedError
+from .models import RunState
+from .packages import RunContext, inspect_package, stage_package, validate_package
+from .paths import XPPaths
+from .project_registry import ProjectRegistry, load_project_profile
+from .state_store import StateStore
+from .storage import StorageManager
+from .warnings import classify_warnings
+
+
+@dataclass(frozen=True)
+class AutopilotResult:
+    status: str
+    stage: str
+    message: str
+    run_id: str | None = None
+    handoff: Path | None = None
+
+
+class AutopilotController:
+    def __init__(self, user_home: Path):
+        self.user_home = Path(user_home).expanduser().resolve()
+        self.paths = XPPaths.from_home(self.user_home)
+        self.paths.ensure_runtime_dirs()
+        self.state_store = StateStore(self.paths)
+        self.config = XPConfig.for_home(self.user_home)
+
+    def _control_repo(self) -> Path | None:
+        if not self.config.control_repo:
+            return None
+        path = Path(self.config.control_repo).expanduser().resolve()
+        return path if (path / ".git").exists() else None
+
+    def _sync_control_state(self, state: RunState) -> bool:
+        control_repo = self._control_repo()
+        if control_repo is None:
+            state.metadata["control_sync"] = "NOT_CONFIGURED"
+            self.state_store.save(state)
+            return True
+        try:
+            ControlStateManager(self.user_home).sync_to_repo(control_repo, push=True)
+        except Exception as exc:
+            state.metadata["control_sync"] = "PENDING"
+            state.metadata["control_sync_error"] = str(exc)
+            self.state_store.save(state)
+            return False
+        state.metadata["control_sync"] = "CLEAR"
+        state.metadata.pop("control_sync_error", None)
+        self.state_store.save(state)
+        return True
+
+    def _acquire_remote_lease(self, profile, state: RunState) -> AutopilotResult | None:
+        control_repo = self._control_repo()
+        if control_repo is None:
+            return None
+        try:
+            RemoteLeaseManager(control_repo, device_id=self.config.device_id).acquire(
+                profile.project_id, state.run_id, push=True
+            )
+        except RemoteLeaseError as exc:
+            return self._failure_handoff(
+                Path(str(state.metadata.get("repo", "."))), profile, state,
+                "Project sedang memiliki active writer di perangkat/run lain; recovery/takeover diperlukan.",
+                {"remote_lease_error": str(exc)},
+            )
+        except Exception as exc:
+            state.stage = "REMOTE_UNAVAILABLE"
+            state.metadata["resume_target"] = "REMOTE_LEASE"
+            state.metadata["remote_lease_error"] = str(exc)
+            self._save(state)
+            return AutopilotResult(
+                "WARNING", state.stage,
+                "Remote writer protection belum dapat diverifikasi; source belum diubah.",
+                state.run_id,
+            )
+        state.metadata["remote_lease"] = "ACTIVE"
+        self._save(state)
+        self._sync_control_state(state)
+        return None
+
+    def _release_remote_lease(self, profile, state: RunState) -> bool:
+        control_repo = self._control_repo()
+        if control_repo is None or state.metadata.get("remote_lease") != "ACTIVE":
+            return True
+        try:
+            RemoteLeaseManager(control_repo, device_id=self.config.device_id).release(
+                profile.project_id, state.run_id, push=True
+            )
+        except Exception as exc:
+            state.metadata["remote_lease_release"] = "PENDING"
+            state.metadata["remote_lease_release_error"] = str(exc)
+            self._save(state)
+            return False
+        state.metadata["remote_lease"] = "RELEASED"
+        state.metadata["remote_lease_release"] = "CLEAR"
+        state.metadata.pop("remote_lease_release_error", None)
+        self._save(state)
+        return True
+
+    def _load_policy(self, repo: Path) -> dict[str, Any]:
+        path = repo / ".xp" / "policies.json"
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _save(self, state: RunState) -> None:
+        self.state_store.save(state)
+
+    def _failure_handoff(
+        self,
+        repo: Path,
+        profile,
+        state: RunState,
+        message: str,
+        technical: dict[str, Any] | None = None,
+        *,
+        outcome: str = "ERROR",
+    ) -> AutopilotResult:
+        incident_id = str(state.metadata.get("incident_id") or f"INC-{secrets.token_hex(4).upper()}")
+        challenge = str(state.metadata.get("incident_challenge") or secrets.token_hex(16))
+        state.stage = "WAITING_GPT"
+        state.metadata.update(
+            {
+                "incident_id": incident_id,
+                "incident_challenge": challenge,
+                "failure_message": message,
+                "repo": str(repo),
+            }
+        )
+        self._save(state)
+        technical_payload = dict(technical or {})
+        technical_payload.setdefault("message", message)
+        technical_payload.setdefault("stage", state.stage)
+        handoff = HandoffBuilder(self.paths.handoffs).build(
+            "INCIDENT",
+            HandoffContext(
+                project_id=profile.project_id,
+                project_name=profile.name,
+                run_id=state.run_id,
+                milestone=state.milestone,
+                stage=state.stage,
+                incident_id=incident_id,
+                incident_challenge=challenge,
+                technical=technical_payload,
+            ),
+        )
+        downloads = self.user_home / "storage" / "downloads"
+        if downloads.exists():
+            expert_dir = downloads / "Expert"
+            expert_dir.mkdir(parents=True, exist_ok=True)
+            published = expert_dir / handoff.name
+            shutil.copy2(handoff, published)
+            handoff = published
+        self._sync_control_state(state)
+        return AutopilotResult(outcome, "WAITING_GPT", message, state.run_id, handoff)
+
+    def _verify_source(self, repo: Path, policy: dict[str, Any]) -> tuple[bool, str, str, tuple[str, ...]]:
+        steps = list(policy.get("source_verify") or [])
+        if not steps:
+            return True, "No source verification steps declared", "CLEAR", ()
+        logs: list[str] = []
+        for step in steps:
+            adapter = step.get("adapter")
+            try:
+                if adapter == "python":
+                    module = str(step.get("module", "unittest"))
+                    runner = PythonAdapter(repo, allowed_modules={module})
+                    result = runner.run_module(module, [str(x) for x in step.get("args", [])])
+                elif adapter == "node":
+                    runner = NodeAdapter(repo)
+                    result = runner.run_script(str(step["script"]))
+                else:
+                    return False, f"Unsupported verify adapter: {adapter}", "ERROR", ()
+            except Exception as exc:
+                from .redaction import redact_text
+                return False, f"Source verification tidak selesai: {redact_text(str(exc))}", "ERROR", ()
+            logs.extend([result.stdout, result.stderr])
+            if result.returncode != 0:
+                return False, "\n".join(logs), "ERROR", ()
+        log_text = "\n".join(logs)
+        warning_policy = dict(policy.get("warnings") or {})
+        warning_result = classify_warnings(
+            log_text,
+            known_markers=list(warning_policy.get("known") or []),
+            detect_markers=list(warning_policy.get("detect") or []),
+        )
+        return True, log_text, warning_result.status, warning_result.unknown
+
+    def _store_package(self, package_path: Path, run_id: str) -> Path:
+        run_dir = self.paths.runs / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        stored = run_dir / "package.zip"
+        shutil.copy2(package_path, stored)
+        return stored
+
+    def _psql(self) -> PostgreSQLAdapter:
+        return PostgreSQLAdapter(psql_bin=os.environ.get("XP_PSQL_BIN", "psql"))
+
+    def _run_db_tests(self, repo: Path, state: RunState, operations: list[dict[str, Any]], profile) -> AutopilotResult | None:
+        tests = [op for op in operations if op.get("type") == "RUN_SQL_TEST"]
+        if not tests:
+            return None
+        adapter = self._psql()
+        env = adapter.environment_status(check_connection=True)
+        if not env.connection_ok:
+            state.stage = "REMOTE_UNAVAILABLE"
+            state.metadata["resume_target"] = "DB_VERIFICATION"
+            state.metadata["db_environment_message"] = env.message
+            self._save(state)
+            return AutopilotResult("WARNING", state.stage, "Database belum dapat dijangkau; source tetap aman.", state.run_id)
+        journal = Journal(self.paths.runs / state.run_id / "journal.jsonl")
+        for op in tests:
+            sql_path = (repo / str(op["path"])).resolve()
+            if repo not in sql_path.parents:
+                return self._failure_handoff(repo, profile, state, "SQL test path keluar dari repository.")
+            entry = journal.before("DB_TEST", {"path": str(op["path"])})
+            result = adapter.run_test_file(sql_path)
+            journal.after(entry, "CLEAR" if result.applied else "ERROR", {"returncode": result.returncode})
+            if not result.applied:
+                return self._failure_handoff(
+                    repo,
+                    profile,
+                    state,
+                    "Database regression gagal.",
+                    {"path": str(op["path"]), "stdout": result.stdout, "stderr": result.stderr},
+                )
+        state.metadata["db_verified"] = True
+        self._save(state)
+        return None
+
+    def _remote_safepoint(self, repo: Path, state: RunState, policy: dict[str, Any], profile) -> AutopilotResult | None:
+        remote_policy = dict(policy.get("remote_safepoint") or {})
+        if not remote_policy.get("enabled", False):
+            state.stage = "REMOTE_SAFEPOINT"
+            state.metadata["remote_safepoint"] = "DISABLED"
+            self._save(state)
+            return None
+        state.stage = "REMOTE_SAFEPOINT_PENDING"
+        self._save(state)
+        try:
+            result = GitAdapter(repo).create_safepoint(
+                f"xp(safepoint): {state.milestone or state.run_id} source verified",
+                push=True,
+                remote=str(remote_policy.get("remote", "origin")),
+            )
+        except AdapterError as exc:
+            state.stage = "REMOTE_UNAVAILABLE"
+            state.metadata["resume_target"] = "REMOTE_SAFEPOINT"
+            state.metadata["remote_error"] = str(exc)
+            self._save(state)
+            return AutopilotResult("WARNING", state.stage, "Source clear secara lokal, tetapi belum terlindungi di remote.", state.run_id)
+        state.stage = "REMOTE_SAFEPOINT"
+        state.metadata.update({"remote_safepoint": "CLEAR", "safepoint_head": result.head, "safepoint_pushed": result.pushed})
+        self._save(state)
+        return None
+
+    def run_package(self, repo: Path, package_path: Path) -> AutopilotResult:
+        repo = Path(repo).expanduser().resolve()
+        package_path = Path(package_path).expanduser().resolve()
+        profile = load_project_profile(repo)
+        policy = self._load_policy(repo)
+        ProjectRegistry.for_home(self.user_home).register(profile, repo)
+        git = GitAdapter(repo)
+        try:
+            git_state = git.state(fetch=True)
+        except Exception as exc:
+            dummy = RunState(profile.project_id, f"{profile.project_id}-unstarted", "FAILED_SAFE")
+            return self._failure_handoff(repo, profile, dummy, f"Git state unavailable: {exc}")
+
+        if git_state.remote and git_state.fetch_checked and git_state.fetch_ok is False:
+            return AutopilotResult(
+                "WARNING",
+                "REMOTE_UNAVAILABLE",
+                "Remote Git belum dapat diverifikasi; source belum diubah. Periksa jaringan/auth lalu ulangi.",
+                None,
+            )
+
+        protected = set(policy.get("protected_branches") or ["main", "master"])
+        allowed_prefixes = tuple(policy.get("allowed_branch_prefixes") or ["work/", "xp/recovery/"])
+        if git_state.branch in protected or (allowed_prefixes and not any((git_state.branch or "").startswith(p) for p in allowed_prefixes)):
+            run = RunState(profile.project_id, f"{profile.project_id}-blocked", "FAILED_SAFE")
+            return self._failure_handoff(
+                repo, profile, run, "Branch tidak memenuhi policy XP; source tidak diubah.",
+                {"branch": git_state.branch, "protected": sorted(protected), "allowed_prefixes": allowed_prefixes},
+            )
+        if git_state.dirty:
+            run = RunState(profile.project_id, f"{profile.project_id}-blocked", "FAILED_SAFE")
+            return self._failure_handoff(repo, profile, run, "Project memiliki perubahan lokal sebelum pekerjaan dimulai; source tidak diubah.")
+        if git_state.diverged or git_state.behind:
+            run = RunState(profile.project_id, f"{profile.project_id}-blocked", "FAILED_SAFE")
+            return self._failure_handoff(
+                repo, profile, run,
+                "Branch kerja tertinggal atau diverged dari remote; source tidak diubah sebelum sinkronisasi diaudit.",
+                {"ahead": git_state.ahead, "behind": git_state.behind, "diverged": git_state.diverged},
+            )
+
+        manifest = inspect_package(package_path)
+        base_fp = git.working_fingerprint()
+        context = RunContext(project_id=profile.project_id, stage="IDLE", base_fingerprint=base_fp)
+        report = validate_package(manifest, context)
+        run_id = manifest.run_id or f"{profile.project_id}-{manifest.milestone or 'work'}-{secrets.token_hex(4)}"
+        state = RunState(profile.project_id, run_id, "PREPARING", manifest.milestone)
+        required_space = max(64 * 1024 * 1024, package_path.stat().st_size * 8)
+        storage = StorageManager(self.paths.root).preflight(required_space)
+        if not storage.ok:
+            self._save(state)
+            return self._failure_handoff(
+                repo, profile, state,
+                "Penyimpanan perangkat tidak cukup untuk menjalankan paket dengan aman; source tidak diubah.",
+                {"free_bytes": storage.free_bytes, "required_bytes": storage.required_bytes},
+            )
+        stored_package = self._store_package(package_path, run_id)
+        state.metadata.update({
+            "package": str(stored_package),
+            "base_fingerprint": base_fp,
+            "repo": str(repo),
+            "branch": git_state.branch,
+            "head": git_state.head,
+        })
+        self._save(state)
+        if report.status != "CLEAR":
+            return self._failure_handoff(repo, profile, state, "Paket XP tidak cocok dengan kondisi project.", {"reasons": report.reasons})
+
+        lock = ProjectLock(self.paths.locks, profile.project_id, run_id)
+        try:
+            lock.acquire()
+        except ProjectLockedError as exc:
+            return self._failure_handoff(repo, profile, state, str(exc))
+        journal = Journal(self.paths.runs / run_id / "journal.jsonl")
+        staging = self.paths.runs / run_id / "staging"
+        backup_root = self.paths.backups / profile.project_id / run_id
+        try:
+            staged = stage_package(stored_package, staging)
+            preflight = PackageExecutor(repo).preflight(staged)
+            if preflight.status != "CLEAR":
+                return self._failure_handoff(repo, profile, state, "Preflight source package gagal.", {"reasons": preflight.reasons})
+            state.stage = "PACKAGE_VALIDATED"
+            self._save(state)
+            lease_result = self._acquire_remote_lease(profile, state)
+            if lease_result:
+                return lease_result
+
+            state.stage = "SOURCE_APPLYING"
+            self._save(state)
+            entry = journal.before("SOURCE_APPLY", {"package": stored_package.name})
+            try:
+                exec_result = PackageExecutor(repo).apply(staged, backup_root=backup_root)
+            except Exception as exc:
+                journal.after(entry, "ERROR", {"message": str(exc)})
+                return self._failure_handoff(repo, profile, state, f"Source apply gagal: {exc}")
+            journal.after(entry, "CLEAR", {"changed_paths": exec_result.changed_paths})
+            state.stage = "SOURCE_APPLIED"
+            state.metadata["changed_paths"] = list(exec_result.changed_paths)
+            self._save(state)
+
+            verify_entry = journal.before("SOURCE_VERIFY", {})
+            ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy)
+            journal.after(verify_entry, "CLEAR" if ok else "ERROR", {"warning_status": warning_status})
+            if not ok:
+                diff = git._run("diff", "--binary", "HEAD", "--", check=False)
+                return self._failure_handoff(repo, profile, state, "Source verification gagal.", {"verify_log": verify_log, "git_diff": diff})
+            if warning_status == "WARNING":
+                diff = git._run("diff", "--binary", "HEAD", "--", check=False)
+                return self._failure_handoff(
+                    repo, profile, state, "Warning baru memerlukan audit GPT.",
+                    {"unknown_warnings": unknown_warnings, "verify_log": verify_log, "git_diff": diff}, outcome="WARNING",
+                )
+            state.stage = "SOURCE_VERIFIED"
+            state.metadata["working_fingerprint"] = git.working_fingerprint()
+            state.metadata["warning_status"] = warning_status
+            self._save(state)
+
+            remote_result = self._remote_safepoint(repo, state, policy, profile)
+            if remote_result:
+                return remote_result
+
+            db_ops = [op for op in manifest.operations if op.get("type") in {"APPLY_DB_MIGRATION", "RUN_SQL_TEST"}]
+            if any(op.get("type") == "APPLY_DB_MIGRATION" for op in db_ops):
+                state.stage = "DB_APPROVAL_REQUIRED"
+                self._save(state)
+                return AutopilotResult("CLEAR", state.stage, "Source clear; perubahan database menunggu approval manusia.", run_id)
+
+            db_result = self._run_db_tests(repo, state, db_ops, profile)
+            if db_result:
+                return db_result
+            state.stage = "HUMAN_QA"
+            self._save(state)
+            self._sync_control_state(state)
+            return AutopilotResult("CLEAR", state.stage, "Automated gates clear; human QA required.", run_id)
+        finally:
+            lock.release()
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+
+    def continue_database(self, repo: Path, run_id: str, *, approved: bool) -> AutopilotResult:
+        repo = Path(repo).expanduser().resolve()
+        profile = load_project_profile(repo)
+        state = self.state_store.load(run_id)
+        if state.project_id != profile.project_id:
+            return self._failure_handoff(repo, profile, state, "Run/project identity mismatch.")
+        if state.stage != "DB_APPROVAL_REQUIRED":
+            return self._failure_handoff(repo, profile, state, f"Database continuation tidak valid dari state {state.stage}.")
+        if not approved:
+            state.stage = "PAUSED_BY_USER"
+            state.metadata["resume_target"] = "DB_APPROVAL_REQUIRED"
+            self._save(state)
+            return AutopilotResult("KNOWN", state.stage, "Pekerjaan dipause oleh pengguna sebelum perubahan database.", run_id)
+        package_path = Path(str(state.metadata["package"]))
+        manifest = inspect_package(package_path)
+        operations = list(manifest.operations)
+        migrations = [op for op in operations if op.get("type") == "APPLY_DB_MIGRATION"]
+        tests = [op for op in operations if op.get("type") == "RUN_SQL_TEST"]
+        if migrations and not tests:
+            return self._failure_handoff(repo, profile, state, "Migration tidak memiliki SQL regression test; eksekusi diblok.")
+        adapter = self._psql()
+        env = adapter.environment_status(check_connection=True)
+        if not env.connection_ok:
+            state.stage = "REMOTE_UNAVAILABLE"
+            state.metadata["resume_target"] = "DB_APPLY"
+            self._save(state)
+            return AutopilotResult("WARNING", state.stage, "Database belum dapat dijangkau; migration belum dijalankan.", run_id)
+        lock = ProjectLock(self.paths.locks, profile.project_id, run_id)
+        try:
+            lock.acquire()
+        except ProjectLockedError as exc:
+            return self._failure_handoff(repo, profile, state, str(exc))
+        journal = Journal(self.paths.runs / run_id / "journal.jsonl")
+        try:
+            for op in migrations:
+                sql_path = (repo / str(op["path"])).resolve()
+                if repo not in sql_path.parents:
+                    return self._failure_handoff(repo, profile, state, "Migration path keluar dari repository.")
+                sql = sql_path.read_text(encoding="utf-8")
+                classification = classify_sql(sql)
+                if classification in {"DESTRUCTIVE", "NON_TRANSACTIONAL", "UNKNOWN"}:
+                    return self._failure_handoff(
+                        repo, profile, state,
+                        f"Migration classified {classification}; normal approval tidak cukup.",
+                        {"classification": classification, "path": str(op["path"])},
+                    )
+            state.stage = "DB_APPLYING"
+            self._save(state)
+            for op in migrations:
+                sql_path = repo / str(op["path"])
+                entry = journal.before("DB_APPLY", {"path": str(op["path"])})
+                result = adapter.apply_file(sql_path, single_transaction=True)
+                journal.after(entry, "CLEAR" if result.applied else "ERROR", {"returncode": result.returncode})
+                if not result.applied:
+                    return self._failure_handoff(
+                        repo, profile, state, "Database migration gagal.",
+                        {"path": str(op["path"]), "stdout": result.stdout, "stderr": result.stderr},
+                    )
+            state.stage = "DB_APPLIED"
+            state.metadata["db_applied"] = True
+            self._save(state)
+            test_result = self._run_db_tests(repo, state, operations, profile)
+            if test_result:
+                return test_result
+            state.stage = "DB_VERIFIED"
+            state.metadata["db_verified"] = True
+            self._save(state)
+            state.stage = "HUMAN_QA"
+            self._save(state)
+            self._sync_control_state(state)
+            return AutopilotResult("CLEAR", state.stage, "Database applied dan regression clear; human QA required.", run_id)
+        finally:
+            lock.release()
+
+    def run_remediation(self, repo: Path, package_path: Path) -> AutopilotResult:
+        repo = Path(repo).expanduser().resolve()
+        package_path = Path(package_path).expanduser().resolve()
+        profile = load_project_profile(repo)
+        policy = self._load_policy(repo)
+        manifest = inspect_package(package_path)
+        if manifest.package_type != "REMEDIATION" or not manifest.run_id:
+            dummy = RunState(profile.project_id, manifest.run_id or f"{profile.project_id}-invalid-remediation", "FAILED_SAFE", manifest.milestone)
+            return self._failure_handoff(repo, profile, dummy, "File bukan remediation package XP yang valid.")
+        try:
+            state = self.state_store.load(manifest.run_id)
+        except Exception as exc:
+            dummy = RunState(profile.project_id, manifest.run_id, "FAILED_SAFE", manifest.milestone)
+            return self._failure_handoff(repo, profile, dummy, f"Run target remediation tidak ditemukan: {exc}")
+        if state.stage != "WAITING_GPT":
+            return self._failure_handoff(repo, profile, state, f"Remediation hanya boleh diterapkan saat WAITING_GPT, bukan {state.stage}.")
+        git = GitAdapter(repo)
+        current_fp = git.working_fingerprint()
+        context = RunContext(
+            project_id=profile.project_id,
+            stage=state.stage,
+            base_fingerprint=current_fp,
+            run_id=state.run_id,
+            incident_id=state.metadata.get("incident_id"),
+            incident_challenge=state.metadata.get("incident_challenge"),
+        )
+        report = validate_package(manifest, context)
+        if report.status != "CLEAR":
+            return self._failure_handoff(repo, profile, state, "Remediation tidak cocok dengan incident aktif.", {"reasons": report.reasons})
+        run_dir = self.paths.runs / state.run_id
+        remediations = run_dir / "remediations"
+        remediations.mkdir(parents=True, exist_ok=True)
+        stored = remediations / f"{state.metadata.get('incident_id', 'incident')}-{package_path.name}"
+        shutil.copy2(package_path, stored)
+        staging = run_dir / "staging-remediation"
+        backup_root = self.paths.backups / profile.project_id / state.run_id / "remediation"
+        lock = ProjectLock(self.paths.locks, profile.project_id, state.run_id)
+        try:
+            lock.acquire()
+        except ProjectLockedError as exc:
+            return self._failure_handoff(repo, profile, state, str(exc))
+        journal = Journal(run_dir / "journal.jsonl")
+        try:
+            staged = stage_package(stored, staging)
+            preflight = PackageExecutor(repo).preflight(staged)
+            if preflight.status != "CLEAR":
+                return self._failure_handoff(repo, profile, state, "Preflight remediation gagal.", {"reasons": preflight.reasons})
+            entry = journal.before("SOURCE_APPLY", {"remediation": stored.name, "incident": state.metadata.get("incident_id")})
+            try:
+                result = PackageExecutor(repo).apply(staged, backup_root=backup_root)
+            except Exception as exc:
+                journal.after(entry, "ERROR", {"message": str(exc)})
+                return self._failure_handoff(repo, profile, state, f"Remediation apply gagal: {exc}")
+            journal.after(entry, "CLEAR", {"changed_paths": result.changed_paths})
+            verify_entry = journal.before("SOURCE_VERIFY", {"after_remediation": True})
+            ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy)
+            journal.after(verify_entry, "CLEAR" if ok else "ERROR", {"warning_status": warning_status})
+            if not ok:
+                return self._failure_handoff(repo, profile, state, "Verification setelah remediation masih gagal.", {"verify_log": verify_log, "git_diff": git._run("diff", "--binary", "HEAD", "--", check=False)})
+            if warning_status == "WARNING":
+                return self._failure_handoff(repo, profile, state, "Remediation menghasilkan warning baru.", {"unknown_warnings": unknown_warnings, "verify_log": verify_log}, outcome="WARNING")
+            old_incident = state.metadata.get("incident_id")
+            state.metadata["resolved_incident_id"] = old_incident
+            state.metadata.pop("incident_id", None)
+            state.metadata.pop("incident_challenge", None)
+            state.metadata.pop("failure_message", None)
+            state.metadata["working_fingerprint"] = git.working_fingerprint()
+            state.metadata["warning_status"] = warning_status
+            state.stage = "SOURCE_VERIFIED"
+            self._save(state)
+            remote_result = self._remote_safepoint(repo, state, policy, profile)
+            if remote_result:
+                return remote_result
+            original_manifest = inspect_package(Path(str(state.metadata["package"])))
+            db_ops = [op for op in original_manifest.operations if op.get("type") in {"APPLY_DB_MIGRATION", "RUN_SQL_TEST"}]
+            if any(op.get("type") == "APPLY_DB_MIGRATION" for op in db_ops):
+                state.stage = "DB_APPROVAL_REQUIRED"
+                self._save(state)
+                return AutopilotResult("CLEAR", state.stage, "Remediation clear; perubahan database kembali menunggu approval.", state.run_id)
+            db_result = self._run_db_tests(repo, state, db_ops, profile)
+            if db_result:
+                return db_result
+            state.stage = "HUMAN_QA"
+            self._save(state)
+            self._sync_control_state(state)
+            return AutopilotResult("CLEAR", state.stage, "Remediation clear; lanjut ke human QA.", state.run_id)
+        finally:
+            lock.release()
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+
+    def record_human_qa(self, repo: Path, run_id: str, *, clear: bool, notes: str = "") -> AutopilotResult:
+        from datetime import datetime, timezone
+        from .redaction import redact_text
+
+        repo = Path(repo).expanduser().resolve()
+        profile = load_project_profile(repo)
+        state = self.state_store.load(run_id)
+        if state.stage != "HUMAN_QA":
+            return self._failure_handoff(repo, profile, state, f"Human QA tidak valid dari state {state.stage}.")
+        if not clear:
+            state.metadata["human_qa"] = {
+                "status": "PROBLEM",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "notes": redact_text(notes),
+            }
+            self._save(state)
+            return self._failure_handoff(
+                repo,
+                profile,
+                state,
+                "Human QA menemukan masalah.",
+                {"human_qa_notes": redact_text(notes)},
+            )
+        state.metadata["human_qa"] = {
+            "status": "CLEAR",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "notes": redact_text(notes),
+        }
+        state.stage = "READY_TO_LOCK"
+        self._save(state)
+        self._sync_control_state(state)
+        return AutopilotResult("CLEAR", state.stage, "Human QA clear; pekerjaan siap untuk Final Lock.", run_id)
+
+    def final_lock(self, repo: Path, run_id: str, *, approved: bool) -> AutopilotResult:
+        from .checkpoint import CheckpointBuilder, CheckpointContext
+
+        repo = Path(repo).expanduser().resolve()
+        profile = load_project_profile(repo)
+        policy = self._load_policy(repo)
+        state = self.state_store.load(run_id)
+        if state.stage != "READY_TO_LOCK":
+            return self._failure_handoff(repo, profile, state, f"Final Lock tidak valid dari state {state.stage}.")
+        if not approved:
+            return AutopilotResult("KNOWN", state.stage, "Final Lock belum disetujui; state tidak berubah.", run_id)
+
+        git = GitAdapter(repo)
+        # Freeze the verified source boundary. Human QA may inspect the app, but
+        # source must not change after XP verification without a new package/audit.
+        safepoint_head = state.metadata.get("safepoint_head")
+        current_git = git.state(fetch=False)
+        if safepoint_head:
+            if current_git.head != safepoint_head or current_git.dirty:
+                return self._failure_handoff(
+                    repo, profile, state,
+                    "Source berubah setelah verification/safepoint; Final Lock diblok sampai perubahan diaudit.",
+                    {"expected_head": safepoint_head, "actual_head": current_git.head, "dirty": current_git.dirty},
+                )
+        else:
+            expected_fp = state.metadata.get("working_fingerprint")
+            if expected_fp and git.working_fingerprint() != expected_fp:
+                return self._failure_handoff(
+                    repo, profile, state,
+                    "Source berubah setelah verification; Final Lock diblok sampai perubahan diaudit.",
+                )
+
+        ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy)
+        if not ok:
+            return self._failure_handoff(repo, profile, state, "Final verification gagal sebelum lock.", {"verify_log": verify_log})
+        if warning_status == "WARNING":
+            return self._failure_handoff(
+                repo, profile, state, "Warning baru ditemukan saat Final Lock.",
+                {"unknown_warnings": unknown_warnings, "verify_log": verify_log}, outcome="WARNING",
+            )
+
+        package_path = Path(str(state.metadata.get("package", "")))
+        if package_path.is_file():
+            manifest = inspect_package(package_path)
+            db_ops = [op for op in manifest.operations if op.get("type") == "RUN_SQL_TEST"]
+            if state.metadata.get("db_applied") or state.metadata.get("db_verified"):
+                db_result = self._run_db_tests(repo, state, db_ops, profile)
+                if db_result:
+                    return db_result
+
+        state.stage = "LOCKING"
+        self._save(state)
+        remote_policy = dict(policy.get("remote_safepoint") or {})
+        push = bool(remote_policy.get("enabled", False))
+        try:
+            safepoint = git.create_safepoint(
+                f"chore(xp): lock {state.milestone or state.run_id}",
+                push=push,
+                remote=str(remote_policy.get("remote", "origin")),
+            )
+        except AdapterError as exc:
+            # Commit locally if remote push failed; do not claim remote lock.
+            try:
+                safepoint = git.create_safepoint(
+                    f"chore(xp): lock {state.milestone or state.run_id}", push=False
+                )
+            except Exception as local_exc:
+                return self._failure_handoff(repo, profile, state, f"Final source safepoint gagal: {local_exc}")
+            state.metadata["final_remote_error"] = str(exc)
+
+        checkpoint_dir = self.paths.checkpoints / profile.project_id / run_id
+        artifacts = CheckpointBuilder(checkpoint_dir).build(
+            CheckpointContext(
+                project_id=profile.project_id,
+                project_name=profile.name,
+                milestone=state.milestone or run_id,
+                stage="LOCKED_REMOTE" if safepoint.pushed else "LOCKED_LOCAL",
+                evidence={
+                    "source_verification": "CLEAR",
+                    "warning_status": warning_status,
+                    "human_qa": state.metadata.get("human_qa"),
+                    "db_applied": state.metadata.get("db_applied", False),
+                    "db_verified": state.metadata.get("db_verified", False),
+                },
+                run_id=run_id,
+                commit=safepoint.head,
+            ),
+            repo=repo,
+        )
+        state.metadata.update(
+            {
+                "checkpoint_dir": str(checkpoint_dir),
+                "checkpoint_report": str(artifacts.report),
+                "source_archive": str(artifacts.source_archive) if artifacts.source_archive else None,
+                "final_head": safepoint.head,
+            }
+        )
+        state.stage = "LOCKED_REMOTE" if safepoint.pushed else "LOCKED_LOCAL"
+        self._save(state)
+        lease_released = self._release_remote_lease(profile, state)
+        control_synced = self._sync_control_state(state)
+        if self._control_repo() is not None and (not lease_released or not control_synced):
+            state.stage = "LOCKED_LOCAL"
+            self._save(state)
+        return AutopilotResult("CLEAR", state.stage, "Final Lock tercatat dengan checkpoint dan source archive.", run_id)
+
+    def resume(self, repo: Path, run_id: str) -> AutopilotResult:
+        """Resume a stored run conservatively after pause/process interruption.
+
+        Safe/idempotent verification may be repeated. Critical operations are
+        never blindly rerun; ambiguous DB/source/lock state is handed to GPT.
+        """
+        from .recovery import RecoveryEngine
+
+        repo = Path(repo).expanduser().resolve()
+        profile = load_project_profile(repo)
+        policy = self._load_policy(repo)
+        state = self.state_store.load(run_id)
+        if state.project_id != profile.project_id:
+            return self._failure_handoff(repo, profile, state, "Run/project identity mismatch during recovery.")
+        journal = Journal(self.paths.runs / run_id / "journal.jsonl")
+        decision = RecoveryEngine(journal).inspect(state)
+
+        if decision.status == "RECOVERY_REQUIRED":
+            operation = decision.operation or "UNKNOWN"
+            subject = "Database" if operation == "DB_APPLY" else "Operasi kritis"
+            return self._failure_handoff(
+                repo,
+                profile,
+                state,
+                f"{subject} terputus dan tidak akan dijalankan ulang secara buta; audit recovery diperlukan.",
+                {"interrupted_operation": operation, "recovery_decision": decision.status},
+            )
+
+        if decision.status == "SAFE_RETRY":
+            interrupted = journal.interrupted_operation()
+            operation = decision.operation
+            if operation == "SOURCE_VERIFY":
+                ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy)
+                if interrupted:
+                    journal.after(
+                        str(interrupted["entry_id"]),
+                        "CLEAR" if ok else "ERROR",
+                        {"recovered": True, "warning_status": warning_status},
+                    )
+                if not ok:
+                    return self._failure_handoff(repo, profile, state, "Source verification gagal saat recovery.", {"verify_log": verify_log})
+                if warning_status == "WARNING":
+                    return self._failure_handoff(
+                        repo,
+                        profile,
+                        state,
+                        "Warning baru ditemukan saat recovery.",
+                        {"unknown_warnings": unknown_warnings, "verify_log": verify_log},
+                        outcome="WARNING",
+                    )
+                state.stage = "SOURCE_VERIFIED"
+                state.metadata["working_fingerprint"] = GitAdapter(repo).working_fingerprint()
+                state.metadata["warning_status"] = warning_status
+                self._save(state)
+                remote_result = self._remote_safepoint(repo, state, policy, profile)
+                if remote_result:
+                    return remote_result
+                package_path = Path(str(state.metadata.get("package", "")))
+                manifest = inspect_package(package_path) if package_path.is_file() else None
+                db_ops = [op for op in (manifest.operations if manifest else ()) if op.get("type") in {"APPLY_DB_MIGRATION", "RUN_SQL_TEST"}]
+                if any(op.get("type") == "APPLY_DB_MIGRATION" for op in db_ops):
+                    state.stage = "DB_APPROVAL_REQUIRED"
+                    self._save(state)
+                    return AutopilotResult("CLEAR", state.stage, "Recovery source clear; perubahan database menunggu approval manusia.", run_id)
+                db_result = self._run_db_tests(repo, state, db_ops, profile)
+                if db_result:
+                    return db_result
+                state.stage = "HUMAN_QA"
+                self._save(state)
+                return AutopilotResult("CLEAR", state.stage, "Recovery selesai; lanjut ke human QA.", run_id)
+            return self._failure_handoff(
+                repo,
+                profile,
+                state,
+                f"Recovery aman untuk {operation}, tetapi handler belum tersedia; audit GPT diperlukan.",
+                {"interrupted_operation": operation},
+            )
+
+        # No interrupted journal entry: return or continue only from explicit safe gates.
+        if state.stage == "HUMAN_QA":
+            return AutopilotResult("CLEAR", state.stage, "Pekerjaan menunggu human QA; tidak ada source/database yang diulang.", run_id)
+        if state.stage == "READY_TO_LOCK":
+            return AutopilotResult("CLEAR", state.stage, "Pekerjaan siap Final Lock dan menunggu approval manusia.", run_id)
+        if state.stage == "WAITING_GPT":
+            return AutopilotResult("WARNING", state.stage, "Pekerjaan menunggu hasil audit/remediation GPT.", run_id)
+        if state.stage in {"LOCKED_LOCAL", "LOCKED_REMOTE"}:
+            return AutopilotResult("KNOWN", state.stage, "Pekerjaan sudah dikunci; tidak ada tindakan yang diulang.", run_id)
+        if state.stage == "DB_APPROVAL_REQUIRED":
+            return AutopilotResult("CLEAR", state.stage, "Perubahan database masih menunggu approval manusia.", run_id)
+        if state.stage == "REMOTE_UNAVAILABLE":
+            target = str(state.metadata.get("resume_target", ""))
+            if target == "REMOTE_SAFEPOINT":
+                return self._remote_safepoint(repo, state, policy, profile) or AutopilotResult(
+                    "CLEAR", state.stage, "Remote safepoint berhasil dipulihkan.", run_id
+                )
+            return AutopilotResult("WARNING", state.stage, "Koneksi remote/database perlu tersedia sebelum pekerjaan dapat dilanjutkan.", run_id)
+        if state.stage == "PAUSED_BY_USER":
+            target = str(state.metadata.get("resume_target", ""))
+            if target == "DB_APPROVAL_REQUIRED":
+                state.stage = "DB_APPROVAL_REQUIRED"
+                self._save(state)
+                return AutopilotResult("CLEAR", state.stage, "Pekerjaan kembali ke persetujuan database; tidak ada perubahan database yang dijalankan.", run_id)
+            return AutopilotResult("KNOWN", state.stage, "Pekerjaan dipause; XP tidak menebak tahap lanjutan.", run_id)
+        return self._failure_handoff(
+            repo,
+            profile,
+            state,
+            f"State {state.stage} tidak memiliki jalur resume otomatis yang aman.",
+        )
+
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/checkpoint.py #####
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from .redaction import sanitize_mapping
+
+
+@dataclass
+class CheckpointContext:
+    project_id: str
+    project_name: str
+    milestone: str
+    stage: str
+    source_paths: list[Path] = field(default_factory=list)
+    evidence: dict[str, Any] = field(default_factory=dict)
+    run_id: str | None = None
+    commit: str | None = None
+
+
+@dataclass(frozen=True)
+class CheckpointArtifacts:
+    report: Path
+    sha256s: Path
+    state: Path
+    source_archive: Path | None = None
+
+
+class CheckpointBuilder:
+    def __init__(self, output_dir: Path):
+        self.output_dir = Path(output_dir)
+
+    @staticmethod
+    def _sha(path: Path) -> str:
+        h = hashlib.sha256()
+        with Path(path).open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    def _create_source_archive(self, repo: Path) -> Path:
+        archive = self.output_dir / "SOURCE.zip"
+        result = subprocess.run(
+            ["git", "archive", "--format=zip", "--output", str(archive), "HEAD"],
+            cwd=repo,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "git archive failed")
+        return archive
+
+    def build(self, context: CheckpointContext, *, repo: Path | None = None) -> CheckpointArtifacts:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        safe_evidence = sanitize_mapping(context.evidence)
+        timestamp = datetime.now(timezone.utc).isoformat()
+        report = self.output_dir / "CHECKPOINT.md"
+        state = self.output_dir / "CHECKPOINT_STATE.json"
+        sha_file = self.output_dir / "SHA256SUMS.txt"
+        source_archive = self._create_source_archive(Path(repo).resolve()) if repo is not None else None
+        source_hashes = {
+            str(Path(path)): self._sha(Path(path))
+            for path in context.source_paths
+            if Path(path).is_file()
+        }
+        report.write_text(
+            "\n".join(
+                [
+                    f"# {context.project_name} — {context.milestone} Checkpoint",
+                    "",
+                    f"Project ID: `{context.project_id}`",
+                    f"Run: `{context.run_id or '-'}`",
+                    f"Stage: `{context.stage}`",
+                    f"Commit: `{context.commit or '-'}`",
+                    f"Created: `{timestamp}`",
+                    "",
+                    "## Evidence",
+                    "",
+                    "```json",
+                    json.dumps(safe_evidence, indent=2, sort_keys=True),
+                    "```",
+                    "",
+                    "## Source hashes",
+                    "",
+                    *[f"- `{digest}`  `{path}`" for path, digest in source_hashes.items()],
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        state.write_text(
+            json.dumps(
+                {
+                    "project_id": context.project_id,
+                    "project_name": context.project_name,
+                    "milestone": context.milestone,
+                    "stage": context.stage,
+                    "run_id": context.run_id,
+                    "commit": context.commit,
+                    "created_at": timestamp,
+                    "evidence": safe_evidence,
+                    "source_hashes": source_hashes,
+                    "source_archive": source_archive.name if source_archive else None,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        lines = []
+        for path in [report, state, *( [source_archive] if source_archive else [] )]:
+            lines.append(f"{self._sha(path)}  {path.name}")
+        for path, digest in source_hashes.items():
+            lines.append(f"{digest}  {path}")
+        sha_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return CheckpointArtifacts(report=report, sha256s=sha_file, state=state, source_archive=source_archive)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/cli.py #####
+from __future__ import annotations
+
+import argparse
+import getpass
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from . import __version__
+from .autopilot import AutopilotController
+from .adapters.postgresql import PostgreSQLAdapter
+from .adapters.git import GitAdapter
+from .inbox import scan_inbox
+from .models import RunState
+from .packages import RunContext
+from .paths import XPPaths
+from .project_registry import ProjectRegistry, load_project_profile
+from .recovery import RecoveryEngine, ProjectRecoveryManager
+from .journal import Journal
+from .control import ControlStateManager
+from .config import XPConfig
+from .onboarding import ProjectOnboarder, OnboardingError
+from .state_store import StateStore
+from .handoff import HandoffBuilder, HandoffContext
+from .redaction import sanitize_mapping
+from .ui import clear_screen, header, wait_for_enter, human_path
+from .readiness import audit_workstation
+from .workflow import PRIMARY_SEQUENCE
+from .github_recovery import GitHubCLI, GitHubControlRecovery, GitHubRecoveryError
+
+
+def _home() -> Path:
+    return Path(os.environ.get("XP_USER_HOME", str(Path.home()))).expanduser().resolve()
+
+
+def _paths() -> XPPaths:
+    return XPPaths.from_home(_home())
+
+
+def _latest_run(paths: XPPaths, project_id: str | None = None) -> RunState | None:
+    if not paths.runs.exists():
+        return None
+    states: list[tuple[float, RunState]] = []
+    store = StateStore(paths)
+    for item in paths.runs.iterdir():
+        state_file = item / "state.json"
+        if not state_file.is_file():
+            continue
+        try:
+            state = store.load(item.name)
+        except Exception:
+            continue
+        if project_id and state.project_id != project_id:
+            continue
+        states.append((state_file.stat().st_mtime, state))
+    return max(states, key=lambda x: x[0])[1] if states else None
+
+
+def _status() -> int:
+    registry = ProjectRegistry.for_home(_home())
+    projects = registry.list_projects()
+    clear_screen()
+    header()
+    print("STATUS WORKSTATION")
+    print()
+    if not projects:
+        print("Belum ada project yang terdaftar.")
+        print("Engine XP siap digunakan untuk menambah atau memulihkan project.")
+        return 0
+    last = registry.last_active() or projects[0]
+    run = _latest_run(_paths(), last.project_id)
+    print(f"Project       : {last.name}")
+    print(f"Ketersediaan  : {'Lokal' if last.repo_path else 'Remote only'}")
+    if run:
+        print(f"Pekerjaan     : {run.milestone or run.run_id}")
+        print(f"Tahap         : {run.stage}")
+    else:
+        print("Pekerjaan     : Tidak ada pekerjaan aktif")
+    return 0
+
+
+def _self_test() -> int:
+    paths = _paths()
+    paths.ensure_runtime_dirs()
+    checks = {
+        "Python": sys.version_info >= (3, 10),
+        "Git": shutil.which("git") is not None,
+        "Penyimpanan XP": os.access(paths.root, os.W_OK),
+        "PostgreSQL Client": shutil.which("psql") is not None,
+    }
+    clear_screen()
+    header()
+    print("CEK KESEHATAN XP")
+    print()
+    print("PERANGKAT")
+    for name, ok in checks.items():
+        symbol = "✓" if ok else "?"
+        status = "Siap" if ok else "Belum tersedia"
+        print(f"{symbol} {name:<20} {status}")
+
+    registry = ProjectRegistry.for_home(_home())
+    project = registry.last_active()
+    print()
+    print("KONEKSI PROJECT")
+    if not project:
+        print("- Belum ada project aktif")
+    elif not project.repo_path:
+        print(f"- {project.name}: source masih remote only")
+    else:
+        try:
+            profile = load_project_profile(Path(project.repo_path))
+        except Exception:
+            print(f"? {project.name}: profile project belum dapat dibaca")
+        else:
+            if profile.database_adapter == "postgresql":
+                if not checks["PostgreSQL Client"]:
+                    print("? Database: PostgreSQL Client belum tersedia")
+                elif not os.environ.get("DATABASE_URL"):
+                    print("? Database: credential project belum dikonfigurasi")
+                else:
+                    env = PostgreSQLAdapter().environment_status(check_connection=True)
+                    print("✓ Database: terhubung" if env.connection_ok else "? Database: belum dapat dijangkau")
+            else:
+                print("- Database: project tidak memakai PostgreSQL")
+
+    critical = checks["Python"] and checks["Git"] and checks["Penyimpanan XP"]
+    print()
+    print("CORE: CLEAR" if critical else "CORE: ERROR")
+    if not checks["PostgreSQL Client"]:
+        print("Catatan: PostgreSQL Client hanya wajib untuk project yang memerlukannya.")
+    return 0 if critical else 2
+
+
+
+def _render_readiness(report) -> None:
+    clear_screen()
+    header()
+    print("AUDIT KESIAPAN")
+    print()
+    print(f"Status  : {report.overall}")
+    print(f"Project : {report.project_name or 'Belum ada project aktif'}")
+    print()
+    symbols = {"CLEAR": "✓", "INFO": "-", "WARNING": "⚠", "BLOCKER": "✗"}
+    for check in report.checks:
+        print(f"{symbols.get(check.level, '?')} {check.title}: {check.detail}")
+    print()
+    if report.overall == "READY":
+        print("XP siap menjalankan workflow yang sudah dikonfigurasi untuk project aktif.")
+    elif report.overall == "READY_WITH_LIMITATIONS":
+        print("XP dapat dipakai, tetapi ada perlindungan/koneksi yang belum lengkap.")
+    else:
+        print("XP belum boleh menjalankan pekerjaan project sampai blocker diselesaikan.")
+
+
+def _audit() -> int:
+    report = audit_workstation(_home(), check_database_connection=True)
+    _render_readiness(report)
+    return 0
+
+
+def _protect_source_remote(project) -> int:
+    if not project.repo_path:
+        print("Source project belum tersedia lokal.")
+        return 2
+    repo = Path(project.repo_path)
+    try:
+        policy_path = repo / ".xp" / "policies.json"
+        policy = json.loads(policy_path.read_text(encoding="utf-8")) if policy_path.exists() else {}
+        git = GitAdapter(repo)
+        state = git.state(fetch=True)
+    except Exception as exc:
+        print(f"Source belum dapat diperiksa: {exc}")
+        return 2
+    protected = set(str(x) for x in policy.get("protected_branches", ["main", "master"]))
+    allowed = tuple(str(x) for x in policy.get("allowed_branch_prefixes", ["work/", "xp/recovery/"]))
+    if not state.branch:
+        print("Source tidak dipush: repository berada pada detached HEAD.")
+        return 2
+    if state.branch in protected or (allowed and not state.branch.startswith(allowed)):
+        print(f"Source tidak dipush: branch {state.branch} tidak memenuhi policy XP.")
+        return 2
+    if state.dirty:
+        print("Source tidak dipush otomatis karena masih ada perubahan lokal yang belum diaudit.")
+        return 2
+    if state.diverged or state.behind:
+        print("Source tidak dipush: remote lebih maju/diverged dan harus direkonsiliasi lebih dahulu.")
+        return 2
+    if not state.remote:
+        print("Source belum memiliki origin remote.")
+        return 2
+    if state.upstream and state.ahead <= 0:
+        print("Source sudah terlindungi di remote; tidak ada commit lokal yang tertinggal.")
+        return 0
+    print("LINDUNGI SOURCE KE REMOTE")
+    print()
+    print(f"Branch : {state.branch}")
+    if state.upstream:
+        print(f"Commit lokal belum terlindungi: {state.ahead}")
+    else:
+        print("Upstream remote belum terpasang untuk branch ini.")
+    print()
+    print("[1] Push branch ini ke origin")
+    print("[0] Batal")
+    try:
+        choice = input("Pilih: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return 0
+    if choice != "1":
+        return 0
+    try:
+        git.push_current_branch(remote="origin")
+        after = git.state(fetch=True)
+    except Exception as exc:
+        print(f"Push belum berhasil: {exc}")
+        return 2
+    if after.behind or after.diverged or after.ahead:
+        print("Push selesai tetapi sinkronisasi belum clear; audit ulang diperlukan.")
+        return 2
+    print("✓ Source sudah terlindungi di remote.")
+    return 0
+
+
+def _configure_database_session(project) -> int:
+    if not project.repo_path:
+        print("Project belum tersedia lokal.")
+        return 2
+    try:
+        profile = load_project_profile(Path(project.repo_path))
+    except Exception as exc:
+        print(f"Profile project belum dapat dibaca: {exc}")
+        return 2
+    if profile.database_adapter != "postgresql":
+        print("Project aktif tidak menggunakan PostgreSQL.")
+        return 0
+    print("HUBUNGKAN DATABASE — SESI INI")
+    print()
+    print("XP tidak menyimpan credential database ke repository, log, handoff, atau recovery remote.")
+    print("Credential ini hanya hidup selama proses XP ini berjalan.")
+    try:
+        value = getpass.getpass("Tempel DATABASE_URL PostgreSQL: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return 0
+    if not value:
+        print("Credential tidak diubah.")
+        return 0
+    previous = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = value
+    status = PostgreSQLAdapter().environment_status(check_connection=True)
+    if not status.connection_ok:
+        if previous is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous
+        print("Database belum dapat dihubungi. Credential tidak dipertahankan pada sesi XP.")
+        if status.message:
+            from .redaction import redact_text
+            print(f"Detail aman: {redact_text(status.message, known_secrets=[value])}")
+        return 2
+    print("✓ Database terhubung.")
+    print("Credential aktif untuk sesi XP ini dan tidak disimpan ke disk oleh XP.")
+    return 0
+
+
+def _readiness_center(project) -> int:
+    while True:
+        report = audit_workstation(_home(), check_database_connection=True)
+        _render_readiness(report)
+        print()
+        print("TINDAKAN KESIAPAN")
+        print()
+        print("[1] Lindungi source ke remote")
+        print("[2] Recovery & perlindungan")
+        print("[3] Hubungkan database untuk sesi ini")
+        print("[4] Audit ulang")
+        print("[0] Kembali")
+        try:
+            choice = input("Pilih: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if choice == "0":
+            return 0
+        if choice == "1":
+            _protect_source_remote(project)
+            wait_for_enter()
+            continue
+        if choice == "2":
+            _recovery_menu()
+            continue
+        if choice == "3":
+            _configure_database_session(project)
+            wait_for_enter()
+            continue
+        if choice == "4":
+            continue
+        print("Pilihan tidak tersedia. Gunakan angka 0–4.")
+        wait_for_enter()
+
+
+def _project_search_roots(home: Path) -> list[Path]:
+    candidates = [
+        home / "projects",
+        home / "WORKSTATION" / "projects",
+        home / "workstation" / "projects",
+        home / "workspace",
+        home / "Workspace",
+        home / "repos",
+        home / "src",
+    ]
+    try:
+        children = list(home.iterdir())
+    except OSError:
+        children = []
+    for child in children:
+        if not child.is_dir() or child.name.startswith(".") or child.name in {"storage", "node_modules"}:
+            continue
+        if (child / ".git").exists():
+            candidates.append(child)
+        nested_projects = child / "projects"
+        if nested_projects.is_dir():
+            candidates.append(nested_projects)
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if not candidate.is_dir():
+            continue
+        resolved = candidate.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            roots.append(resolved)
+    return roots
+
+
+def _discover_git_repositories(home: Path) -> list[Path]:
+    repositories: list[Path] = []
+    for search_root in _project_search_roots(home):
+        if (search_root / ".git").exists():
+            repositories.append(search_root.resolve())
+            continue
+        for current, dirs, _files in os.walk(search_root):
+            path = Path(current)
+            depth = len(path.relative_to(search_root).parts)
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in {"node_modules", "storage"}]
+            if (path / ".git").exists():
+                repositories.append(path.resolve())
+                dirs[:] = []
+                continue
+            if depth >= 2:
+                dirs[:] = []
+    return sorted(set(repositories))
+
+
+def _bundled_profile_packages(home: Path) -> list[Path]:
+    root = home / ".expert-workstation"
+    active_file = root / "active-version"
+    candidates: list[Path] = []
+    if active_file.is_file():
+        version = active_file.read_text(encoding="utf-8").strip()
+        package_dir = root / "versions" / version / "packages"
+        if package_dir.is_dir():
+            candidates.extend(sorted(package_dir.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True))
+    for package_dir in [home / "storage" / "downloads" / "Expert", home / "storage" / "downloads"]:
+        if package_dir.is_dir():
+            candidates.extend(sorted(package_dir.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True))
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for item in candidates:
+        resolved = item.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(resolved)
+    return unique
+
+
+def _onboard_from_home_menu() -> int:
+    home = _home()
+    onboarder = ProjectOnboarder(home)
+    repos = _discover_git_repositories(home)
+    packages = _bundled_profile_packages(home)
+
+    # Candidate shape: (repo, package-or-none, display name, profile_already_present)
+    by_repo: dict[Path, tuple[Path, Path | None, str, bool]] = {}
+    for repo in repos:
+        try:
+            profile = load_project_profile(repo)
+        except Exception:
+            continue
+        by_repo[repo] = (repo, None, profile.name, True)
+
+    for package in packages:
+        for repo in repos:
+            if repo in by_repo:
+                continue
+            try:
+                manifest = onboarder.validate_target(repo, package)
+            except (OnboardingError, OSError, ValueError):
+                continue
+            by_repo[repo] = (repo, package, manifest.project_name, False)
+
+    matches = list(by_repo.values())
+    clear_screen()
+    header()
+    print("TAMBAH PROJECT")
+    print()
+    if not matches:
+        print("Belum ditemukan project yang dapat ditambahkan otomatis.")
+        print("XP tidak mengubah file apa pun.")
+        print()
+        print("Project existing tetap dapat diaudit/import pada tahap berikutnya melalui GPT handoff.")
+        return 0
+
+    shown = matches[:4]
+    print(f"{len(shown)} project ditemukan.")
+    print()
+    for index, (_repo, _package, name, existing) in enumerate(shown, 1):
+        marker = " — Profile XP sudah ada" if existing else ""
+        print(f"[{index}] {name}{marker}")
+    print("[0] Batal")
+    try:
+        selected = input("Pilih project: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return 0
+    if selected == "0":
+        print("Tidak ada perubahan yang dilakukan.")
+        return 0
+    if not selected.isdigit() or not (1 <= int(selected) <= len(shown)):
+        print("Pilihan tidak tersedia. Tidak ada perubahan yang dilakukan.")
+        return 0
+
+    repo, package, _name, existing = shown[int(selected) - 1]
+    clear_screen()
+    header()
+    print("MENYIAPKAN PROJECT")
+    print()
+    try:
+        if existing:
+            profile = load_project_profile(repo)
+            ProjectRegistry.for_home(home).register(profile, repo)
+            print("✓ Source dikenali")
+            print("✓ Profile XP sudah ada")
+            print("✓ Project didaftarkan")
+            print("✓ Tidak ada source business logic yang diubah")
+        else:
+            assert package is not None
+            print("✓ Source dan anchor canonical cocok")
+            profile = onboarder.apply(repo, package)
+            print("✓ Profile XP dipasang")
+            print("✓ Safepoint profile dibuat")
+            print("✓ Project didaftarkan")
+    except Exception as exc:
+        print("✗ PROJECT BELUM DITAMBAHKAN")
+        print()
+        print(f"Alasan: {exc}")
+        print("XP berhenti tanpa melanjutkan ke pekerjaan project.")
+        return 2
+
+    print()
+    print("PROJECT BERHASIL DITAMBAHKAN")
+    checkpoint = profile.metadata.get("current_canonical_milestone")
+    if checkpoint:
+        print(f"Checkpoint dikenali: {checkpoint}")
+
+    print()
+    print("XP menyiapkan pengenalan awal untuk GPT agar pekerjaan berikutnya memakai source yang tepat.")
+    try:
+        _kind, artifact = _build_handoff(str(repo))
+    except Exception as exc:
+        print("? Project sudah siap, tetapi Bootstrap GPT handoff belum dapat dibuat.")
+        print(f"  Alasan: {exc}")
+        print("  Handoff dapat dibuat lagi dari menu GPT baru / handoff.")
+        return 0
+    print()
+    print("File untuk GPT:")
+    print(artifact.name)
+    print(f"Lokasi: {human_path(artifact.parent)}")
+    return 0
+
+
+def _recovery_candidates(home: Path) -> list[Path]:
+    values: list[Path] = []
+    for root in (home / "storage" / "downloads" / "Expert", home / "storage" / "downloads"):
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if data.get("control_version") == 1:
+                values.append(path)
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for path in values:
+        resolved = path.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(resolved)
+    return unique[:4]
+
+
+def _recovery_status() -> None:
+    cfg = XPConfig.for_home(_home())
+    print("STATUS PERLINDUNGAN RECOVERY")
+    print()
+    if cfg.control_repo and (Path(cfg.control_repo) / ".git").exists():
+        print("✓ Control repository terkonfigurasi")
+        print("  Remote state dapat disinkronkan oleh workflow XP.")
+    else:
+        print("⚠ Remote recovery belum aktif")
+        print("  XP lokal tetap dapat dipakai.")
+        print("  Jika ponsel hilang sebelum remote recovery diaktifkan, state lokal XP dapat ikut hilang.")
+
+
+def _setup_github_recovery() -> None:
+    clear_screen()
+    header()
+    print("RECOVERY GITHUB")
+    print()
+    cli = GitHubCLI()
+    if not cli.available():
+        print("GitHub CLI belum tersedia di perangkat ini.")
+        print("XP tidak memasang aplikasi sistem secara diam-diam.")
+        print("Aplikasi yang dibutuhkan untuk fitur ini: gh (GitHub CLI).")
+        return
+    if not cli.authenticated():
+        print("GitHub CLI tersedia tetapi belum login.")
+        print()
+        print("[1] Mulai login GitHub")
+        print("[0] Batal")
+        try:
+            choice = input("Pilih: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if choice != "1":
+            return
+        try:
+            cli.login()
+        except GitHubRecoveryError as exc:
+            print(f"Login belum berhasil: {exc}")
+            return
+    print("Menyiapkan private recovery repository...")
+    try:
+        result = GitHubControlRecovery(_home(), client=cli).setup()
+    except Exception as exc:
+        print(f"Recovery GitHub belum berhasil: {exc}")
+        return
+    print("✓ GitHub terhubung")
+    print(f"✓ Control repository PRIVATE: {result.repository}")
+    if result.restored_existing_state:
+        print("✓ State workstation lama dipulihkan")
+    else:
+        print("✓ State workstation saat ini diamankan ke GitHub")
+    print("Remote recovery: AKTIF")
+
+
+def _recovery_menu() -> int:
+    while True:
+        clear_screen()
+        header()
+        print("PULIHKAN WORKSTATION")
+        print()
+        print("[1] Aktifkan / pulihkan dari GitHub")
+        print("[2] Gunakan file recovery")
+        print("[3] Pulihkan project dari remote")
+        print("[4] Status perlindungan recovery")
+        print("[0] Kembali")
+        try:
+            choice = input("Pilih: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if choice == "0":
+            return 0
+        if choice == "1":
+            _setup_github_recovery()
+            wait_for_enter()
+            continue
+        if choice == "2":
+            candidates = _recovery_candidates(_home())
+            clear_screen()
+            header()
+            print("FILE RECOVERY")
+            print()
+            if not candidates:
+                print("Belum ada file recovery XP yang ditemukan di Download/Expert.")
+                wait_for_enter()
+                continue
+            for index, path in enumerate(candidates, 1):
+                print(f"[{index}] {path.name}")
+            print("[0] Batal")
+            selected = input("Pilih file: ").strip()
+            if selected.isdigit() and 1 <= int(selected) <= len(candidates):
+                try:
+                    ControlStateManager(_home()).restore(candidates[int(selected) - 1])
+                except Exception as exc:
+                    print(f"Recovery belum berhasil: {exc}")
+                else:
+                    print("Workstation berhasil memuat control-state recovery.")
+                wait_for_enter()
+            continue
+        if choice == "3":
+            registry = ProjectRegistry.for_home(_home())
+            remote = [p for p in registry.list_projects() if not p.repo_path and p.remote_url]
+            clear_screen()
+            header()
+            print("PULIHKAN PROJECT DARI REMOTE")
+            print()
+            if not remote:
+                print("Belum ada project remote-only yang siap dipulihkan.")
+                wait_for_enter()
+                continue
+            for index, project in enumerate(remote, 1):
+                print(f"[{index}] {project.name}")
+            print("[0] Batal")
+            selected = input("Pilih project: ").strip()
+            if selected.isdigit() and 1 <= int(selected) <= len(remote):
+                chosen = remote[int(selected) - 1]
+                try:
+                    recovered = ProjectRecoveryManager(_home()).recover(chosen.project_id)
+                except Exception as exc:
+                    print(f"Project belum berhasil dipulihkan: {exc}")
+                else:
+                    print(f"Project berhasil dipulihkan: {chosen.name}")
+                    print(f"Lokasi lokal: {recovered.name}")
+                wait_for_enter()
+            continue
+        if choice == "4":
+            clear_screen()
+            header()
+            _recovery_status()
+            wait_for_enter()
+            continue
+        print("Pilihan tidak tersedia. Gunakan angka 0–4.")
+        wait_for_enter()
+
+def _about() -> None:
+    clear_screen()
+    header()
+    print("TENTANG")
+    print()
+    print("Expert Workstation adalah workstation project universal berbasis terminal.")
+    print("Command utama: xp")
+    print()
+    print("Peran:")
+    print("- Anda: tujuan, keputusan, QA, dan Final Lock.")
+    print("- GPT: desain, coding, audit, dan paket remediation/work.")
+    print("- XP: workflow, eksekusi aman, verifikasi, recovery, dan evidence.")
+    print()
+    print(f"Versi engine: {__version__}")
+
+
+def _project_card(project, run: RunState | None) -> None:
+    profile = None
+    git_state = None
+    if project.repo_path:
+        try:
+            profile = load_project_profile(Path(project.repo_path))
+        except Exception:
+            profile = None
+        try:
+            from .adapters.git import GitAdapter
+            git_state = GitAdapter(Path(project.repo_path)).state(fetch=False)
+        except Exception:
+            git_state = None
+    checkpoint = profile.metadata.get("current_canonical_milestone") if profile else None
+    cfg = XPConfig.for_home(_home())
+    recovery_active = bool(cfg.control_repo and (Path(cfg.control_repo) / ".git").exists())
+    print("PROJECT AKTIF")
+    print()
+    print(project.name)
+    print()
+    print(f"Checkpoint : {checkpoint or '-'}")
+    if run:
+        print(f"Pekerjaan  : {run.milestone or run.run_id} — {run.stage}")
+        if run.stage in PRIMARY_SEQUENCE:
+            index = PRIMARY_SEQUENCE.index(run.stage)
+            percent = round(index * 100 / (len(PRIMARY_SEQUENCE) - 1))
+            width = 16
+            filled = round(width * percent / 100)
+            bar = "█" * filled + "░" * (width - filled)
+            print(f"Progress   : {bar} {percent}%")
+        else:
+            print(f"Progress   : tertahan di {run.stage}")
+    else:
+        print("Pekerjaan  : Belum ada")
+    if not project.repo_path:
+        print("Source     : ⚠ Remote only")
+    elif git_state is None:
+        print("Source     : ? Belum dapat diperiksa")
+    elif git_state.dirty:
+        print("Source     : ⚠ Ada perubahan lokal")
+    else:
+        print("Source     : ✓ Aman")
+    if profile and profile.database_adapter:
+        print("Database   : Belum diperiksa")
+    else:
+        print("Database   : Tidak digunakan / belum dideklarasikan")
+    print(f"Recovery   : {'✓ Aktif' if recovery_active else '⚠ Belum aktif'}")
+
+
+def _show_autopilot_result(result) -> None:
+    print()
+    print(f"Status : {result.status}")
+    print(f"Tahap  : {result.stage}")
+    print(result.message)
+    if result.handoff:
+        print()
+        print("File untuk GPT:")
+        print(result.handoff.name)
+        print(f"Lokasi: {human_path(result.handoff.parent)}")
+
+
+def _qa_steps_for_run(run: RunState) -> tuple[str, ...]:
+    package_value = str(run.metadata.get("package", ""))
+    if package_value:
+        try:
+            from .packages import inspect_package
+            manifest = inspect_package(Path(package_value))
+            if manifest.human_qa:
+                return manifest.human_qa
+        except Exception:
+            pass
+    return (
+        "Uji fungsi yang berubah sesuai tujuan pekerjaan.",
+        "Refresh / buka ulang bagian yang diuji dan pastikan hasil tetap benar.",
+        "Pastikan fungsi lama yang berkaitan masih bekerja normal.",
+    )
+
+
+def _database_change_summary(repo: Path, run: RunState) -> tuple[int, tuple[str, ...]]:
+    package_value = str(run.metadata.get("package", ""))
+    if not package_value:
+        return 0, ()
+    try:
+        from .packages import inspect_package
+        from .adapters.postgresql import classify_sql
+        manifest = inspect_package(Path(package_value))
+    except Exception:
+        return 0, ()
+    classes: list[str] = []
+    count = 0
+    for op in manifest.operations:
+        if op.get("type") != "APPLY_DB_MIGRATION":
+            continue
+        count += 1
+        path = (repo / str(op.get("path", ""))).resolve()
+        try:
+            if repo == path or repo in path.parents:
+                classes.append(classify_sql(path.read_text(encoding="utf-8")))
+        except Exception:
+            classes.append("BELUM_DIKLASIFIKASI")
+    return count, tuple(classes)
+
+
+def _continue_active_project(project, run: RunState) -> int:
+    if not project.repo_path:
+        print("Project masih remote-only. Gunakan menu recovery untuk memulihkan source lokal.")
+        return 0
+    repo = Path(project.repo_path)
+    controller = AutopilotController(_home())
+
+    if run.stage == "DB_APPROVAL_REQUIRED":
+        clear_screen()
+        header()
+        print("PERSETUJUAN DATABASE")
+        print()
+        print(f"Pekerjaan: {run.milestone or run.run_id}")
+        count, classes = _database_change_summary(repo, run)
+        print(f"Migration yang akan diterapkan: {count}")
+        if classes:
+            print(f"Klasifikasi: {', '.join(classes)}")
+        print()
+        print("XP hanya akan melanjutkan migration yang lolos policy keselamatan dan regression test.")
+        print("Tidak akan merge ke main.")
+        print("Tidak akan deploy production.")
+        print()
+        print("[1] Lanjutkan perubahan database")
+        print("[2] Tunda pekerjaan")
+        print("[3] Lihat status / audit")
+        print("[0] Kembali")
+        try:
+            choice = input("Pilih: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if choice == "1":
+            result = controller.continue_database(repo, run.run_id, approved=True)
+            _show_autopilot_result(result)
+            return 0
+        if choice == "2":
+            result = controller.continue_database(repo, run.run_id, approved=False)
+            _show_autopilot_result(result)
+            return 0
+        if choice == "3":
+            _audit()
+        return 0
+
+    if run.stage == "HUMAN_QA":
+        clear_screen()
+        header()
+        print("QA MANUSIA")
+        print()
+        print(f"Pekerjaan: {run.milestone or run.run_id}")
+        print("Automated gate sudah berhenti di titik yang membutuhkan pemeriksaan manusia.")
+        print()
+        print("Yang perlu Anda coba:")
+        for index, step in enumerate(_qa_steps_for_run(run), 1):
+            print(f"{index}. {step}")
+        print()
+        print("[1] QA CLEAR")
+        print("[2] ADA MASALAH")
+        print("[3] Belum selesai / tunda")
+        print("[0] Kembali")
+        try:
+            choice = input("Pilih: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if choice == "1":
+            result = controller.record_human_qa(repo, run.run_id, clear=True, notes="QA manusia clear melalui menu XP")
+            _show_autopilot_result(result)
+            return 0
+        if choice == "2":
+            try:
+                notes = input("Tuliskan masalah yang Anda lihat: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return 0
+            if not notes:
+                print("Masalah belum dicatat karena keterangannya kosong.")
+                return 0
+            print(f"Masalah dicatat: {notes}")
+            result = controller.record_human_qa(repo, run.run_id, clear=False, notes=notes)
+            _show_autopilot_result(result)
+            return 0
+        return 0
+
+    if run.stage == "READY_TO_LOCK":
+        clear_screen()
+        header()
+        print("FINAL LOCK")
+        print()
+        print(f"Pekerjaan: {run.milestone or run.run_id}")
+        print("Semua gate sebelumnya telah mencapai titik siap dikunci.")
+        print()
+        print("Jika disetujui, XP akan:")
+        print("✓ menjalankan final verification")
+        print("✓ mencatat Human QA")
+        print("✓ membuat commit/checkpoint/source archive + SHA")
+        print("✓ mengamankan work branch sesuai policy remote jika tersedia")
+        print()
+        print("Tidak akan merge ke main.")
+        print("Tidak akan deploy production.")
+        print()
+        print("[1] FINAL LOCK")
+        print("[2] Belum / kembali")
+        try:
+            choice = input("Pilih: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if choice == "1":
+            result = controller.final_lock(repo, run.run_id, approved=True)
+            _show_autopilot_result(result)
+        return 0
+
+    if run.stage == "WAITING_GPT":
+        clear_screen()
+        header()
+        print("MENUNGGU HASIL GPT")
+        print()
+        print("XP menghentikan pekerjaan pada titik aman karena diperlukan audit/remediation GPT.")
+        print("Setelah file hasil GPT selesai diunduh, pilih 'Scan hasil GPT terbaru' dari Home.")
+        handoff = run.metadata.get("handoff") or run.metadata.get("handoff_path")
+        if handoff:
+            print()
+            print(f"Handoff terakhir: {Path(str(handoff)).name}")
+        return 0
+
+    result = controller.resume(repo, run.run_id)
+    _show_autopilot_result(result)
+    # A safe resume can intentionally restore a human gate. Render that gate
+    # on the next Home interaction rather than executing it implicitly.
+    return 0
+
+
+def _home_screen() -> int:
+    while True:
+        registry = ProjectRegistry.for_home(_home())
+        projects = registry.list_projects()
+        clear_screen()
+        header()
+        if not projects:
+            print("BELUM ADA PROJECT")
+            print()
+            print("[1] Tambah project")
+            print("[2] Pulihkan workstation")
+            print("[3] Cek kesehatan XP")
+            print("[4] Tentang")
+            print("[0] Keluar")
+            try:
+                choice = input("Pilih: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return 0
+            if choice == "0":
+                return 0
+            if choice == "1":
+                _onboard_from_home_menu()
+                wait_for_enter()
+                continue
+            if choice == "2":
+                _recovery_menu()
+                continue
+            if choice == "3":
+                _self_test()
+                wait_for_enter()
+                continue
+            if choice == "4":
+                _about()
+                wait_for_enter()
+                continue
+            print("Pilihan tidak tersedia pada layar ini. Gunakan angka 0–4.")
+            wait_for_enter()
+            continue
+
+        last = registry.last_active() or projects[0]
+        run = _latest_run(_paths(), last.project_id)
+        _project_card(last, run)
+        print()
+        print("[1] Lanjutkan dari posisi terakhir")
+        print("[2] Scan hasil GPT terbaru")
+        print("[3] Pilih project lain")
+        print("[4] GPT baru / handoff")
+        print("[5] Status & audit")
+        print("[0] Keluar")
+        try:
+            choice = input("Pilih: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return 0
+        if choice == "0":
+            return 0
+        if choice == "1":
+            if not last.repo_path:
+                print("Project masih remote-only. Gunakan menu recovery untuk memulihkan source lokal.")
+            elif not run:
+                print("Belum ada pekerjaan aktif.")
+                print("Jika Anda sudah mengunduh paket dari GPT, pilih 'Scan hasil GPT terbaru'.")
+            else:
+                _continue_active_project(last, run)
+            wait_for_enter()
+            continue
+        if choice == "2":
+            _scan_for_last(last, run)
+            wait_for_enter()
+            continue
+        if choice == "3":
+            clear_screen()
+            header()
+            print("PILIH PROJECT")
+            print()
+            for index, project in enumerate(projects, 1):
+                suffix = " — remote only" if not project.repo_path else ""
+                print(f"[{index}] {project.name}{suffix}")
+            print("[0] Batal")
+            try:
+                selected = input("Pilih project: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return 0
+            if selected.isdigit() and 1 <= int(selected) <= len(projects):
+                chosen = projects[int(selected) - 1]
+                ProjectRegistry.for_home(_home()).activate(chosen.project_id)
+                print(f"Project aktif: {chosen.name}")
+                wait_for_enter()
+            continue
+        if choice == "4":
+            if not last.repo_path:
+                print("Project belum tersedia lokal; pulihkan source dahulu sebelum membuat handoff lengkap.")
+            else:
+                _make_handoff(last.repo_path)
+            wait_for_enter()
+            continue
+        if choice == "5":
+            _readiness_center(last)
+            continue
+        print("Pilihan tidak tersedia pada layar ini. Gunakan angka 0–5.")
+        wait_for_enter()
+
+def _scan_for_last(project, run: RunState | None) -> int:
+    if not project.repo_path:
+        print("Project belum tersedia lokal; pemulihan repository diperlukan dahulu.")
+        return 0
+    repo = Path(project.repo_path)
+    try:
+        profile = load_project_profile(repo)
+    except Exception as exc:
+        print(f"Profile project belum siap: {exc}")
+        return 2
+    from .adapters.git import GitAdapter
+    try:
+        fingerprint = GitAdapter(repo).working_fingerprint()
+    except Exception:
+        fingerprint = "unknown"
+    context = RunContext(
+        project_id=profile.project_id,
+        stage=run.stage if run else "IDLE",
+        base_fingerprint=fingerprint,
+        run_id=run.run_id if run else None,
+        incident_id=(run.metadata.get("incident_id") if run else None),
+        incident_challenge=(run.metadata.get("incident_challenge") if run else None),
+    )
+    downloads = _home() / "storage" / "downloads"
+    expert = downloads / "Expert"
+    candidates = scan_inbox([expert, downloads], context, limit=4)
+    if not candidates:
+        print("Tidak ada paket XP kompatibel yang ditemukan.")
+        return 0
+    print("PAKET XP TERBARU")
+    for index, item in enumerate(candidates, 1):
+        mark = "★" if item.exact_match else " "
+        print(f"[{index}] {mark} {item.manifest.package_type} — {item.manifest.milestone or '-'}")
+        print(f"    {item.compatibility_reason}")
+    print("\nXP tidak menjalankan file hanya karena terbaru. Pilih paket yang ingin digunakan.")
+    selected = input("Pilih paket (0 batal): ").strip()
+    if not selected.isdigit() or not (1 <= int(selected) <= len(candidates)):
+        return 0
+    chosen = candidates[int(selected) - 1]
+    if not chosen.exact_match:
+        print("Paket tidak cocok persis dengan state aktif. XP tidak menjalankannya.")
+        return 2
+    controller = AutopilotController(_home())
+    if chosen.manifest.package_type == "REMEDIATION":
+        result = controller.run_remediation(repo, chosen.path)
+    elif chosen.manifest.package_type == "WORK":
+        result = controller.run_package(repo, chosen.path)
+    else:
+        print(f"Tipe paket {chosen.manifest.package_type} belum dapat dieksekusi dari Smart Inbox.")
+        return 2
+    print(f"STATUS: {result.status}")
+    print(f"TAHAP: {result.stage}")
+    print(result.message)
+    if result.handoff:
+        print(f"HANDOFF GPT: {result.handoff}")
+    return 0 if result.status in {"CLEAR", "KNOWN", "WARNING"} else 2
+
+
+
+def _recover_project(project_id: str, destination: str | None = None) -> int:
+    target = Path(destination).expanduser().resolve() if destination else None
+    recovered = ProjectRecoveryManager(_home()).recover(project_id, destination=target)
+    print(f"Project berhasil dipulihkan: {recovered}")
+    return 0
+
+def _register(repo: str) -> int:
+    path = Path(repo).expanduser().resolve()
+    profile = load_project_profile(path)
+    ProjectRegistry.for_home(_home()).register(profile, path)
+    print(f"Project terdaftar: {profile.name}")
+    return 0
+
+
+def _build_handoff(repo_value: str) -> tuple[str, Path]:
+    repo = Path(repo_value).expanduser().resolve()
+    profile = load_project_profile(repo)
+    ProjectRegistry.for_home(_home()).register(profile, repo)
+    run = _latest_run(_paths(), profile.project_id)
+    if run and run.stage == "WAITING_GPT":
+        kind = "INCIDENT"
+    elif run:
+        kind = "CONTINUITY"
+    else:
+        kind = "BOOTSTRAP"
+    try:
+        from .adapters.git import GitAdapter
+        git = GitAdapter(repo)
+        git_state = git.state(fetch=False)
+        technical = {
+            "git": {
+                "branch": git_state.branch,
+                "head": git_state.head,
+                "dirty": git_state.dirty,
+                "remote": git_state.remote,
+                "working_fingerprint": git.working_fingerprint(),
+            },
+            "profile": profile.to_dict(),
+            "run_state": run.to_dict() if run else None,
+        }
+    except Exception as exc:
+        technical = {"profile": profile.to_dict(), "git_error": str(exc), "run_state": run.to_dict() if run else None}
+    output = _home() / "storage" / "downloads" / "Expert"
+    if not output.parent.exists():
+        output = _paths().handoffs
+    artifact = HandoffBuilder(output).build(
+        kind,
+        HandoffContext(
+            project_id=profile.project_id,
+            project_name=profile.name,
+            run_id=run.run_id if run else None,
+            milestone=run.milestone if run else None,
+            stage=run.stage if run else "IDLE",
+            incident_id=run.metadata.get("incident_id") if run else None,
+            incident_challenge=run.metadata.get("incident_challenge") if run else None,
+            technical=sanitize_mapping(technical),
+        ),
+    )
+    return kind, artifact
+
+
+def _make_handoff(repo_value: str) -> int:
+    kind, artifact = _build_handoff(repo_value)
+    clear_screen()
+    header()
+    print("HANDOFF GPT SIAP")
+    print()
+    print(f"Jenis          : {kind}")
+    print(f"File untuk GPT : {artifact.name}")
+    print(f"Lokasi         : {human_path(artifact.parent)}")
+    print()
+    print('Kirim ke GPT dengan pesan: "Load XP handoff. Lanjutkan dari state terakhir."')
+    return 0
+
+
+def _onboard(repo: str, package: str) -> int:
+    repo_path = Path(repo).expanduser().resolve()
+    profile = ProjectOnboarder(_home()).apply(repo_path, Path(package))
+    print(f"Project siap dikelola XP: {profile.name}")
+    print("Membuat Bootstrap GPT handoff agar pekerjaan berikutnya memakai fingerprint source aktual...")
+    return _make_handoff(str(repo_path))
+
+
+def _control_export(output: str) -> int:
+    snapshot = ControlStateManager(_home()).export(Path(output))
+    print(f"XP recovery state dibuat: {snapshot}")
+    return 0
+
+
+def _control_restore(snapshot: str) -> int:
+    ControlStateManager(_home()).restore(Path(snapshot))
+    print("Workstation XP berhasil dipulihkan dari control-state.")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="xp", add_help=True)
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("status")
+    sub.add_parser("self-test")
+    sub.add_parser("version")
+    sub.add_parser("audit")
+    register = sub.add_parser("register")
+    register.add_argument("repo")
+    onboard = sub.add_parser("onboard")
+    onboard.add_argument("--repo", required=True)
+    onboard.add_argument("package")
+    handoff = sub.add_parser("handoff")
+    handoff.add_argument("--repo", required=True)
+    control_export = sub.add_parser("control-export")
+    control_export.add_argument("--output", required=True)
+    control_restore = sub.add_parser("control-restore")
+    control_restore.add_argument("snapshot")
+    recover_project = sub.add_parser("recover-project")
+    recover_project.add_argument("project_id")
+    recover_project.add_argument("--destination")
+    run = sub.add_parser("run")
+    run.add_argument("--repo", required=True)
+    run.add_argument("package")
+    remediate = sub.add_parser("remediate")
+    remediate.add_argument("--repo", required=True)
+    remediate.add_argument("package")
+    db = sub.add_parser("continue-db")
+    db.add_argument("--repo", required=True)
+    db.add_argument("--run", required=True)
+    db.add_argument("--approve", action="store_true")
+    qa = sub.add_parser("qa")
+    qa.add_argument("--repo", required=True)
+    qa.add_argument("--run", required=True)
+    group = qa.add_mutually_exclusive_group(required=True)
+    group.add_argument("--clear", action="store_true")
+    group.add_argument("--problem", action="store_true")
+    qa.add_argument("--notes", default="")
+    lock = sub.add_parser("lock")
+    lock.add_argument("--repo", required=True)
+    lock.add_argument("--run", required=True)
+    lock.add_argument("--approve", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.command is None:
+        return _home_screen()
+    if args.command == "status":
+        return _status()
+    if args.command == "self-test":
+        return _self_test()
+    if args.command == "version":
+        print(f"Expert Workstation XP {__version__}")
+        return 0
+    if args.command == "audit":
+        return _audit()
+    if args.command == "register":
+        return _register(args.repo)
+    if args.command == "onboard":
+        return _onboard(args.repo, args.package)
+    if args.command == "handoff":
+        return _make_handoff(args.repo)
+    if args.command == "control-export":
+        return _control_export(args.output)
+    if args.command == "control-restore":
+        return _control_restore(args.snapshot)
+    if args.command == "recover-project":
+        return _recover_project(args.project_id, args.destination)
+    if args.command == "run":
+        result = AutopilotController(_home()).run_package(Path(args.repo), Path(args.package))
+        print(f"STATUS: {result.status}")
+        print(f"TAHAP: {result.stage}")
+        print(result.message)
+        if result.handoff:
+            print(f"HANDOFF GPT: {result.handoff}")
+        return 0 if result.status in {"CLEAR", "KNOWN", "WARNING"} else 2
+    if args.command == "remediate":
+        result = AutopilotController(_home()).run_remediation(Path(args.repo), Path(args.package))
+        print(f"STATUS: {result.status}")
+        print(f"TAHAP: {result.stage}")
+        print(result.message)
+        if result.handoff:
+            print(f"HANDOFF GPT: {result.handoff}")
+        return 0 if result.status in {"CLEAR", "KNOWN", "WARNING"} else 2
+    if args.command == "continue-db":
+        result = AutopilotController(_home()).continue_database(Path(args.repo), args.run, approved=args.approve)
+        print(f"STATUS: {result.status}")
+        print(f"TAHAP: {result.stage}")
+        print(result.message)
+        if result.handoff:
+            print(f"HANDOFF GPT: {result.handoff}")
+        return 0 if result.status in {"CLEAR", "KNOWN", "WARNING"} else 2
+    if args.command == "qa":
+        result = AutopilotController(_home()).record_human_qa(Path(args.repo), args.run, clear=args.clear, notes=args.notes)
+        print(f"STATUS: {result.status}")
+        print(f"TAHAP: {result.stage}")
+        print(result.message)
+        if result.handoff:
+            print(f"HANDOFF GPT: {result.handoff}")
+        return 0 if result.status in {"CLEAR", "KNOWN", "WARNING"} else 2
+    if args.command == "lock":
+        result = AutopilotController(_home()).final_lock(Path(args.repo), args.run, approved=args.approve)
+        print(f"STATUS: {result.status}")
+        print(f"TAHAP: {result.stage}")
+        print(result.message)
+        if result.handoff:
+            print(f"HANDOFF GPT: {result.handoff}")
+        return 0 if result.status in {"CLEAR", "KNOWN", "WARNING"} else 2
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/config.py #####
+from __future__ import annotations
+
+import json
+import os
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+
+from .paths import XPPaths
+
+
+@dataclass
+class XPConfig:
+    home: Path
+    device_id: str
+    control_repo: str | None = None
+
+    @property
+    def path(self) -> Path:
+        return XPPaths.from_home(self.home).config / "workstation.json"
+
+    @classmethod
+    def for_home(cls, home: Path) -> "XPConfig":
+        home = Path(home).expanduser().resolve()
+        paths = XPPaths.from_home(home)
+        paths.ensure_runtime_dirs()
+        path = paths.config / "workstation.json"
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return cls(home=home, device_id=str(data["device_id"]), control_repo=data.get("control_repo"))
+        cfg = cls(home=home, device_id=uuid.uuid4().hex)
+        cfg._save()
+        return cfg
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_name(self.path.name + f".{os.getpid()}.tmp")
+        payload = {"config_version": 1, "device_id": self.device_id, "control_repo": self.control_repo}
+        with tmp.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, self.path)
+
+    def set_control_repo(self, path: Path | None) -> None:
+        self.control_repo = str(Path(path).expanduser().resolve()) if path is not None else None
+        self._save()
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/control.py #####
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .models import RunState
+from .paths import XPPaths
+from .project_registry import ProjectRegistry
+from .redaction import sanitize_mapping
+from .state_store import StateStore
+
+CONTROL_VERSION = 1
+
+
+class ControlStateError(ValueError):
+    pass
+
+
+class ControlStateManager:
+    """Portable, sanitized workflow state for device recovery.
+
+    The control snapshot intentionally contains project references and run state,
+    never repository contents or credentials.
+    """
+
+    def __init__(self, home: Path):
+        self.paths = XPPaths.from_home(home)
+        self.registry = ProjectRegistry(self.paths)
+        self.store = StateStore(self.paths)
+
+    def _runs(self) -> list[dict]:
+        if not self.paths.runs.exists():
+            return []
+        values: list[dict] = []
+        for state_path in sorted(self.paths.runs.glob("*/state.json")):
+            try:
+                data = json.loads(state_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            values.append(sanitize_mapping(data))
+        return values
+
+    def export(self, output_dir: Path) -> Path:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        snapshot = output_dir / "xp-control-state.json"
+        payload = {
+            "control_version": CONTROL_VERSION,
+            "registry": sanitize_mapping(self.registry.export_data()),
+            "runs": self._runs(),
+        }
+        tmp = snapshot.with_suffix(f".{os.getpid()}.tmp")
+        with tmp.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, snapshot)
+        return snapshot
+
+    def sync_to_repo(self, control_repo: Path, *, push: bool = True) -> "ControlSyncResult":
+        control_repo = Path(control_repo).expanduser().resolve()
+        if not (control_repo / ".git").exists():
+            raise ControlStateError("XP control repository is not a Git working tree")
+        state_dir = control_repo / "state"
+        snapshot = self.export(state_dir)
+        _git(control_repo, "add", str(snapshot.relative_to(control_repo)))
+        diff = _git(control_repo, "diff", "--cached", "--quiet", check=False)
+        committed = diff.returncode != 0
+        if committed:
+            _git(control_repo, "commit", "-m", "xp: sync sanitized control state")
+        pushed = False
+        if push:
+            _git(control_repo, "push")
+            pushed = True
+        return ControlSyncResult(committed=committed, pushed=pushed, path=snapshot)
+
+    def restore(self, snapshot: Path) -> None:
+        data = json.loads(Path(snapshot).read_text(encoding="utf-8"))
+        if data.get("control_version") != CONTROL_VERSION:
+            raise ControlStateError("Unsupported XP control-state version")
+        self.registry.restore_remote(dict(data.get("registry") or {"version": 1, "projects": {}}))
+        for raw in data.get("runs") or []:
+            state = RunState.from_dict(dict(raw))
+            self.store.save(state)
+
+
+@dataclass(frozen=True)
+class ControlSyncResult:
+    committed: bool
+    pushed: bool
+    path: Path
+
+
+class RemoteLeaseError(RuntimeError):
+    pass
+
+
+def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True)
+    if check and result.returncode != 0:
+        raise ControlStateError(result.stderr.strip() or result.stdout.strip() or "git command failed")
+    return result
+
+
+def _atomic_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
+    with tmp.open("w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+
+
+class RemoteLeaseManager:
+    def __init__(self, control_repo: Path, *, device_id: str):
+        self.repo = Path(control_repo).expanduser().resolve()
+        self.device_id = str(device_id)
+
+    def acquire(self, project_id: str, run_id: str, *, push: bool = True) -> Path:
+        if push:
+            pulled = _git(self.repo, "pull", "--ff-only", check=False)
+            if pulled.returncode != 0:
+                raise RemoteLeaseError(
+                    "XP control repository tidak dapat fast-forward; lease tidak dibuat sampai state remote direkonsiliasi"
+                )
+        path = self.repo / "leases" / f"{project_id}.json"
+        if path.exists():
+            current = json.loads(path.read_text(encoding="utf-8"))
+            if current.get("device_id") != self.device_id or current.get("run_id") != run_id:
+                raise RemoteLeaseError(
+                    f"Project {project_id} already has an active writer lease; recovery/takeover required"
+                )
+        payload = {
+            "lease_version": 1,
+            "project_id": project_id,
+            "run_id": run_id,
+            "device_id": self.device_id,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _atomic_json(path, payload)
+        if push:
+            _git(self.repo, "add", str(path.relative_to(self.repo)))
+            diff = _git(self.repo, "diff", "--cached", "--quiet", check=False)
+            if diff.returncode != 0:
+                _git(self.repo, "commit", "-m", f"xp: lease {project_id} {run_id}")
+            _git(self.repo, "push")
+        return path
+
+    def release(self, project_id: str, run_id: str, *, push: bool = True) -> None:
+        path = self.repo / "leases" / f"{project_id}.json"
+        if not path.exists():
+            return
+        current = json.loads(path.read_text(encoding="utf-8"))
+        if current.get("device_id") != self.device_id or current.get("run_id") != run_id:
+            raise RemoteLeaseError("Cannot release another device/run lease")
+        path.unlink()
+        if push:
+            _git(self.repo, "add", "-A", "leases")
+            diff = _git(self.repo, "diff", "--cached", "--quiet", check=False)
+            if diff.returncode != 0:
+                _git(self.repo, "commit", "-m", f"xp: release lease {project_id} {run_id}")
+            _git(self.repo, "push")
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/executor.py #####
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
+
+from .packages import StagedPackage
+
+
+class PackageExecutionError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class ExecutionPreflight:
+    status: str
+    reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ExecutionResult:
+    status: str
+    changed_paths: tuple[str, ...]
+    backup_dir: Path
+
+
+_FORBIDDEN_EXACT = {".env", ".git", ".git/config", ".git/HEAD"}
+_FORBIDDEN_PREFIXES = (".git/",)
+_SECRET_NAMES = {"credentials", "credentials.json", "secrets.json", "id_rsa", "id_ed25519"}
+_MUTATION_TYPES = {"ADD_FILE", "REPLACE_FILE", "DELETE_ALLOWED_FILE", "APPLY_PATCH"}
+
+
+def _safe_repo_relative(value: str) -> PurePosixPath:
+    if not value or "\\" in value:
+        raise PackageExecutionError(f"Invalid repository path: {value!r}")
+    path = PurePosixPath(value)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise PackageExecutionError(f"Unsafe repository path: {value!r}")
+    return path
+
+
+def _forbidden_target(path: PurePosixPath) -> bool:
+    text = str(path)
+    if text in _FORBIDDEN_EXACT or any(text.startswith(p) for p in _FORBIDDEN_PREFIXES):
+        return True
+    if path.name.lower() in _SECRET_NAMES or path.name.lower().startswith(".env"):
+        return True
+    return False
+
+
+class PackageExecutor:
+    def __init__(self, repo: Path):
+        self.repo = Path(repo).resolve()
+
+    def _target(self, relative: str) -> Path:
+        safe = _safe_repo_relative(relative)
+        if _forbidden_target(safe):
+            raise PackageExecutionError(f"Forbidden target: {relative}")
+        target = (self.repo / Path(*safe.parts)).resolve()
+        if target != self.repo and self.repo not in target.parents:
+            raise PackageExecutionError(f"Target escapes repository: {relative}")
+        return target
+
+    def _source(self, staged: StagedPackage, relative: str) -> Path:
+        safe = _safe_repo_relative(relative)
+        source = (staged.root / Path(*safe.parts)).resolve()
+        root = staged.root.resolve()
+        if source != root and root not in source.parents:
+            raise PackageExecutionError(f"Source escapes staged package: {relative}")
+        if not source.is_file():
+            raise PackageExecutionError(f"Package source does not exist: {relative}")
+        return source
+
+    def preflight(self, staged: StagedPackage) -> ExecutionPreflight:
+        reasons: list[str] = []
+        manifest = staged.manifest
+        for op in manifest.operations:
+            op_type = str(op.get("type"))
+            if op_type not in _MUTATION_TYPES and op_type not in {
+                "REGISTER_MIGRATION",
+                "RUN_SOURCE_VERIFY",
+                "APPLY_DB_MIGRATION",
+                "RUN_SQL_TEST",
+                "GENERATE_CHECKPOINT",
+            }:
+                reasons.append(f"operation not executable by XP V2: {op_type}")
+                continue
+            if op_type in {"ADD_FILE", "REPLACE_FILE", "DELETE_ALLOWED_FILE"}:
+                try:
+                    target_rel = str(op["path"])
+                    target = _safe_repo_relative(target_rel)
+                    if _forbidden_target(target):
+                        reasons.append(f"forbidden target: {target_rel}")
+                        continue
+                    if not any(
+                        str(target).startswith(prefix.rstrip("/") + "/")
+                        or str(target) == prefix.rstrip("/")
+                        for prefix in manifest.allowed_paths
+                    ):
+                        reasons.append(f"target outside package scope: {target_rel}")
+                    self._target(target_rel)
+                    if op_type in {"ADD_FILE", "REPLACE_FILE"}:
+                        self._source(staged, str(op["source"]))
+                        if op_type == "ADD_FILE" and self._target(target_rel).exists():
+                            reasons.append(f"ADD_FILE target already exists: {target_rel}")
+                        if op_type == "REPLACE_FILE" and not self._target(target_rel).is_file():
+                            reasons.append(f"REPLACE_FILE target missing: {target_rel}")
+                except (KeyError, PackageExecutionError) as exc:
+                    reasons.append(str(exc))
+            elif op_type == "APPLY_PATCH":
+                patch_rel = str(op.get("source", "source.patch"))
+                try:
+                    patch = self._source(staged, patch_rel)
+                except PackageExecutionError as exc:
+                    reasons.append(str(exc))
+                    continue
+                if (self.repo / ".git").exists():
+                    result = subprocess.run(
+                        ["git", "apply", "--check", str(patch)],
+                        cwd=self.repo,
+                        text=True,
+                        capture_output=True,
+                    )
+                    if result.returncode != 0:
+                        reasons.append("git apply preflight failed")
+                else:
+                    reasons.append("APPLY_PATCH requires a Git repository")
+        return ExecutionPreflight("ERROR" if reasons else "CLEAR", tuple(reasons))
+
+    def _copy_backup(self, target: Path, backup_dir: Path) -> None:
+        if not target.exists():
+            return
+        relative = target.relative_to(self.repo)
+        destination = backup_dir / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if target.is_file():
+            shutil.copy2(target, destination)
+
+    def apply(self, staged: StagedPackage, backup_root: Path) -> ExecutionResult:
+        report = self.preflight(staged)
+        if report.status != "CLEAR":
+            raise PackageExecutionError("; ".join(report.reasons))
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_dir = Path(backup_root) / timestamp
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        changed: list[str] = []
+        applied_patches: list[Path] = []
+        try:
+            for op in staged.manifest.operations:
+                op_type = str(op.get("type"))
+                if op_type == "ADD_FILE":
+                    source = self._source(staged, str(op["source"]))
+                    target = self._target(str(op["path"]))
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = target.with_name(target.name + f".xp-{os.getpid()}.tmp")
+                    shutil.copy2(source, tmp)
+                    os.replace(tmp, target)
+                    changed.append(str(target.relative_to(self.repo)))
+                elif op_type == "REPLACE_FILE":
+                    source = self._source(staged, str(op["source"]))
+                    target = self._target(str(op["path"]))
+                    self._copy_backup(target, backup_dir)
+                    tmp = target.with_name(target.name + f".xp-{os.getpid()}.tmp")
+                    shutil.copy2(source, tmp)
+                    os.replace(tmp, target)
+                    changed.append(str(target.relative_to(self.repo)))
+                elif op_type == "DELETE_ALLOWED_FILE":
+                    target = self._target(str(op["path"]))
+                    self._copy_backup(target, backup_dir)
+                    if target.exists():
+                        target.unlink()
+                    changed.append(str(target.relative_to(self.repo)))
+                elif op_type == "APPLY_PATCH":
+                    patch = self._source(staged, str(op.get("source", "source.patch")))
+                    result = subprocess.run(
+                        ["git", "apply", str(patch)],
+                        cwd=self.repo,
+                        text=True,
+                        capture_output=True,
+                    )
+                    if result.returncode != 0:
+                        raise PackageExecutionError(result.stderr.strip() or "git apply failed")
+                    applied_patches.append(patch)
+                    changed.append("<git-patch>")
+                # Non-source operations are intentionally orchestrated by workflow/adapters.
+        except Exception:
+            # Restore file-based mutations first, then reverse patches. This keeps
+            # package application atomic even when a later mutation fails after
+            # a patch has already been applied.
+            for rel in reversed(changed):
+                if rel == "<git-patch>":
+                    continue
+                target = self.repo / rel
+                backup = backup_dir / rel
+                if backup.exists():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(backup, target)
+                else:
+                    target.unlink(missing_ok=True)
+            for patch in reversed(applied_patches):
+                subprocess.run(
+                    ["git", "apply", "-R", str(patch)],
+                    cwd=self.repo,
+                    text=True,
+                    capture_output=True,
+                )
+            raise
+        return ExecutionResult("CLEAR", tuple(changed), backup_dir)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/github_recovery.py #####
+from __future__ import annotations
+
+import shutil
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+from .config import XPConfig
+from .control import ControlStateManager
+from .project_registry import ProjectRegistry
+from .redaction import redact_text
+
+
+class GitHubRecoveryError(RuntimeError):
+    pass
+
+
+class GitHubCLI:
+    """Bounded wrapper around GitHub CLI for XP recovery setup only."""
+
+    def __init__(self, binary: str = "gh"):
+        self.binary = binary
+
+    def available(self) -> bool:
+        return shutil.which(self.binary) is not None
+
+    def _run(self, args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+        if not self.available():
+            raise GitHubRecoveryError("GitHub CLI (gh) belum tersedia")
+        result = subprocess.run([self.binary, *args], text=True, capture_output=True)
+        if check and result.returncode != 0:
+            message = redact_text(result.stderr.strip() or result.stdout.strip() or "GitHub CLI command failed")
+            raise GitHubRecoveryError(message)
+        return result
+
+    def authenticated(self) -> bool:
+        try:
+            return self._run(["auth", "status"], check=False).returncode == 0
+        except GitHubRecoveryError:
+            return False
+
+    def login(self) -> None:
+        if not self.available():
+            raise GitHubRecoveryError("GitHub CLI (gh) belum tersedia")
+        result = subprocess.run([self.binary, "auth", "login"])
+        if result.returncode != 0:
+            raise GitHubRecoveryError("Login GitHub belum berhasil")
+
+    def username(self) -> str:
+        if not self.authenticated():
+            raise GitHubRecoveryError("GitHub CLI belum login. Jalankan login GitHub lebih dahulu.")
+        result = self._run(["api", "user", "--jq", ".login"])
+        value = result.stdout.strip()
+        if not value:
+            raise GitHubRecoveryError("Tidak dapat membaca identitas akun GitHub")
+        return value
+
+    def repo_visibility(self, full_name: str) -> str | None:
+        result = self._run(["repo", "view", full_name, "--json", "visibility", "--jq", ".visibility"], check=False)
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip().upper() or None
+
+    def ensure_private_repo(self, owner: str, name: str) -> bool:
+        full_name = f"{owner}/{name}"
+        visibility = self.repo_visibility(full_name)
+        if visibility is not None:
+            if visibility != "PRIVATE":
+                raise GitHubRecoveryError(f"Repository {full_name} harus PRIVATE untuk XP control-state")
+            return False
+        self._run([
+            "api", "-X", "POST", "user/repos",
+            "-f", f"name={name}",
+            "-F", "private=true",
+            "-F", "auto_init=true",
+        ])
+        return True
+
+    def clone(self, full_name: str, destination: Path) -> None:
+        destination = Path(destination)
+        result = self._run(["repo", "clone", full_name, str(destination)], check=False)
+        if result.returncode != 0:
+            raise GitHubRecoveryError(redact_text(result.stderr.strip() or result.stdout.strip() or "Clone control repository gagal"))
+
+
+@dataclass(frozen=True)
+class GitHubRecoverySetupResult:
+    owner: str
+    repository: str
+    path: Path
+    created_repository: bool
+    restored_existing_state: bool
+
+
+class GitHubControlRecovery:
+    def __init__(self, home: Path, *, client: GitHubCLI | None = None):
+        self.home = Path(home).expanduser().resolve()
+        self.client = client or GitHubCLI()
+
+    @staticmethod
+    def _ensure_local_git_identity(repo: Path) -> None:
+        def get(name: str) -> str:
+            result = subprocess.run(["git", "config", "--get", name], cwd=repo, text=True, capture_output=True)
+            return result.stdout.strip() if result.returncode == 0 else ""
+        if not get("user.name"):
+            subprocess.run(["git", "config", "user.name", "Expert Workstation"], cwd=repo, check=True)
+        if not get("user.email"):
+            subprocess.run(["git", "config", "user.email", "xp@local.invalid"], cwd=repo, check=True)
+
+    def setup(self, *, repo_name: str = "expert-xp-control") -> GitHubRecoverySetupResult:
+        if not self.client.available():
+            raise GitHubRecoveryError("GitHub CLI (gh) belum tersedia")
+        if not self.client.authenticated():
+            raise GitHubRecoveryError("GitHub CLI belum login")
+        owner = self.client.username()
+        created = self.client.ensure_private_repo(owner, repo_name)
+        full_name = f"{owner}/{repo_name}"
+        control_path = self.home / ".expert-workstation" / "control-repo"
+        if control_path.exists() and not (control_path / ".git").exists():
+            raise GitHubRecoveryError("Folder control-repo sudah ada tetapi bukan Git repository")
+        if not control_path.exists():
+            control_path.parent.mkdir(parents=True, exist_ok=True)
+            self.client.clone(full_name, control_path)
+        self._ensure_local_git_identity(control_path)
+        XPConfig.for_home(self.home).set_control_repo(control_path)
+
+        snapshot = control_path / "state" / "xp-control-state.json"
+        local_has_projects = bool(ProjectRegistry.for_home(self.home).list_projects())
+        restored = False
+        manager = ControlStateManager(self.home)
+        if snapshot.is_file() and not local_has_projects:
+            manager.restore(snapshot)
+            restored = True
+        else:
+            manager.sync_to_repo(control_path, push=True)
+        return GitHubRecoverySetupResult(owner, full_name, control_path, created, restored)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/handoff.py #####
+from __future__ import annotations
+
+import json
+import secrets
+import zipfile
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from .redaction import redact_text, sanitize_mapping
+
+
+@dataclass
+class HandoffContext:
+    project_id: str
+    project_name: str
+    run_id: str | None
+    milestone: str | None
+    stage: str
+    incident_id: str | None = None
+    incident_challenge: str | None = None
+    checkpoint: dict[str, Any] = field(default_factory=dict)
+    technical: dict[str, Any] = field(default_factory=dict)
+    notes: str = ""
+
+
+class HandoffBuilder:
+    VALID_KINDS = {"BOOTSTRAP", "CONTINUITY", "INCIDENT", "AUDIT"}
+
+    def __init__(self, output_dir: Path):
+        self.output_dir = Path(output_dir)
+
+    def _context(self, kind: str, context: HandoffContext) -> dict[str, Any]:
+        if kind not in self.VALID_KINDS:
+            raise ValueError(f"Unsupported handoff kind: {kind}")
+        data = asdict(context)
+        data["kind"] = kind
+        data["created_at"] = datetime.now(timezone.utc).isoformat()
+        if kind == "INCIDENT" and not data.get("incident_challenge"):
+            data["incident_challenge"] = secrets.token_hex(16)
+        return sanitize_mapping(data)  # type: ignore[return-value]
+
+    def build(self, kind: str, context: HandoffContext) -> Path:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        data = self._context(kind, context)
+        run_fragment = context.run_id or "NO-RUN"
+        name = f"XP_GPT_{kind}_{context.project_id}_{run_fragment}.zip"
+        target = self.output_dir / name
+        read_first = f"""# Expert Workstation (XP) GPT Handoff\n\nThis package was generated by Expert Workstation (XP).\n\n## Roles\n\n- Human: goals, business decisions, QA, approval, Final Lock.\n- GPT: architecture, audit, coding, and XP-compatible remediation/work packages.\n- XP: workflow authority, execution, verification, recovery, and evidence.\n\n## Current context\n\nProject: {context.project_name} (`{context.project_id}`)\nStage: {context.stage}\nMilestone: {context.milestone or '-'}\nRun: {context.run_id or '-'}\nHandoff kind: {kind}\n\nRead `PROJECT_CONTEXT.json` before proposing actions. Do not bypass XP workflow or ask the human to manually edit project files unless XP cannot represent the required safe action.\n"""
+        instructions = """# GPT Instructions\n\n1. Treat XP state/evidence as operational authority.\n2. Evidence before assertion.\n3. Do not expose or request secrets if not necessary.\n4. Return changes as an XP-compatible declarative package when implementation is required.\n5. For incident remediation, preserve run/incident/challenge bindings.\n6. Do not merge main or deploy production automatically.\n"""
+        technical = json.dumps(sanitize_mapping(context.technical), indent=2, sort_keys=True)
+        context_json = json.dumps(data, indent=2, sort_keys=True)
+        with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("00_READ_FIRST.md", redact_text(read_first))
+            zf.writestr("GPT_INSTRUCTIONS.md", instructions)
+            zf.writestr("PROJECT_CONTEXT.json", context_json)
+            zf.writestr("TECHNICAL_STATE.json", technical)
+            if context.notes:
+                zf.writestr("NOTES.txt", redact_text(context.notes))
+        return target
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/inbox.py #####
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from .packages import PackageError, PackageManifest, RunContext, inspect_package, validate_package
+
+
+@dataclass(frozen=True)
+class PackageCandidate:
+    path: Path
+    manifest: PackageManifest
+    exact_match: bool
+    compatibility_reason: str
+    modified_at: float
+    score: int
+
+
+def _score(manifest: PackageManifest, context: RunContext) -> tuple[int, bool, str]:
+    report = validate_package(manifest, context)
+    if report.status == "CLEAR":
+        if (
+            manifest.package_type == "REMEDIATION"
+            and manifest.run_id == context.run_id
+            and manifest.incident_id == context.incident_id
+            and manifest.incident_challenge == context.incident_challenge
+        ):
+            return 100, True, "exact remediation match"
+        return 80, True, "compatible package"
+    score = 0
+    if manifest.project_id == context.project_id:
+        score += 20
+    if manifest.base_fingerprint == context.base_fingerprint:
+        score += 10
+    if manifest.expected_state == context.stage:
+        score += 10
+    if manifest.run_id and manifest.run_id == context.run_id:
+        score += 10
+    if manifest.incident_id and manifest.incident_id == context.incident_id:
+        score += 10
+    return score, False, "; ".join(report.reasons)
+
+
+def scan_inbox(paths: list[Path], context: RunContext, limit: int = 4) -> list[PackageCandidate]:
+    candidates: list[PackageCandidate] = []
+    seen: set[Path] = set()
+    for root in paths:
+        root = Path(root).expanduser()
+        if not root.exists():
+            continue
+        for path in root.glob("*.zip"):
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            try:
+                manifest = inspect_package(path)
+            except (PackageError, OSError):
+                continue
+            score, exact, reason = _score(manifest, context)
+            candidates.append(
+                PackageCandidate(
+                    path=path,
+                    manifest=manifest,
+                    exact_match=exact,
+                    compatibility_reason=reason,
+                    modified_at=path.stat().st_mtime,
+                    score=score,
+                )
+            )
+    candidates.sort(key=lambda c: (c.score, c.modified_at), reverse=True)
+    return candidates[:limit]
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/journal.py #####
+import json
+import os
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+class Journal:
+    def __init__(self, path: Path):
+        self.path = Path(path)
+
+    def _append(self, record: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(record, sort_keys=True) + "\n"
+        with self.path.open("a", encoding="utf-8") as handle:
+            handle.write(line)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    def before(self, operation: str, metadata: dict[str, Any]) -> str:
+        entry_id = uuid.uuid4().hex
+        self._append(
+            {
+                "type": "BEFORE",
+                "entry_id": entry_id,
+                "operation": operation,
+                "metadata": metadata,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        return entry_id
+
+    def after(self, entry_id: str, result: str, metadata: dict[str, Any]) -> None:
+        self._append(
+            {
+                "type": "AFTER",
+                "entry_id": entry_id,
+                "result": result,
+                "metadata": metadata,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+
+    def _records(self) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        records: list[dict[str, Any]] = []
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                records.append(json.loads(line))
+        return records
+
+    def interrupted_operation(self) -> dict[str, Any] | None:
+        open_entries: dict[str, dict[str, Any]] = {}
+        for record in self._records():
+            if record.get("type") == "BEFORE":
+                open_entries[record["entry_id"]] = record
+            elif record.get("type") == "AFTER":
+                open_entries.pop(record.get("entry_id"), None)
+        if not open_entries:
+            return None
+        return list(open_entries.values())[-1]
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/locks.py #####
+import json
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+
+class ProjectLockedError(RuntimeError):
+    pass
+
+
+@dataclass
+class ProjectLock:
+    root: Path
+    project_id: str
+    run_id: str
+
+    def __post_init__(self) -> None:
+        self.root = Path(self.root)
+        self.path = self.root / f"{self.project_id}.lock"
+        self._held = False
+
+    def _pid_is_alive(self, pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+
+    def inspect(self) -> dict | None:
+        if not self.path.exists():
+            return None
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except Exception:
+            return {"status": "UNKNOWN", "path": str(self.path)}
+        data["status"] = "ACTIVE" if self._pid_is_alive(int(data.get("pid", -1))) else "STALE"
+        return data
+
+    def acquire(self) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
+        existing = self.inspect()
+        if existing is not None:
+            if existing.get("status") == "STALE":
+                try:
+                    self.path.unlink()
+                except FileNotFoundError:
+                    pass
+            else:
+                raise ProjectLockedError(f"Project {self.project_id} already has a lock")
+        payload = json.dumps({"pid": os.getpid(), "project_id": self.project_id, "run_id": self.run_id})
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError as exc:
+            raise ProjectLockedError(f"Project {self.project_id} already has a lock") from exc
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        self._held = True
+
+    def release(self) -> None:
+        if self._held:
+            try:
+                self.path.unlink()
+            except FileNotFoundError:
+                pass
+            self._held = False
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/models.py #####
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
+STATE_VERSION = 1
+
+
+class IncompatibleStateVersion(ValueError):
+    pass
+
+
+@dataclass
+class RunState:
+    project_id: str
+    run_id: str
+    stage: str = "IDLE"
+    milestone: str | None = None
+    state_version: int = STATE_VERSION
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        value = asdict(self)
+        value["state_version"] = STATE_VERSION
+        return value
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RunState":
+        version = int(data.get("state_version", 0))
+        if version != STATE_VERSION:
+            raise IncompatibleStateVersion(
+                f"Unsupported XP state version {version}; expected {STATE_VERSION}"
+            )
+        return cls(
+            project_id=str(data["project_id"]),
+            run_id=str(data["run_id"]),
+            stage=str(data.get("stage", "IDLE")),
+            milestone=data.get("milestone"),
+            state_version=version,
+            created_at=str(data.get("created_at") or datetime.now(timezone.utc).isoformat()),
+            updated_at=str(data.get("updated_at") or datetime.now(timezone.utc).isoformat()),
+            metadata=dict(data.get("metadata") or {}),
+        )
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/onboarding.py #####
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+
+from .project_registry import ProjectIdentityError, ProjectProfile, ProjectRegistry, load_project_profile
+
+
+class OnboardingError(RuntimeError):
+    pass
+
+
+_ALLOWED_PROFILE_FILES = {".xp/project.json", ".xp/policies.json", ".xp/compatibility.json"}
+
+
+def _sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git(repo: Path, *args: str) -> str:
+    result = subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True)
+    if result.returncode != 0:
+        raise OnboardingError(result.stderr.strip() or "git command failed")
+    return result.stdout.strip()
+
+
+def _safe_zip_name(name: str) -> PurePosixPath:
+    if "\\" in name:
+        raise OnboardingError("unsafe profile archive path")
+    p = PurePosixPath(name)
+    if p.is_absolute() or any(part in {"", ".", ".."} for part in p.parts):
+        raise OnboardingError("unsafe profile archive path")
+    return p
+
+
+@dataclass(frozen=True)
+class ProfilePackageManifest:
+    project_id: str
+    project_name: str
+    expected_branch: str
+    expected_head_prefix: str
+    required_file_hashes: dict[str, str]
+    files: dict[str, str]
+
+
+class ProjectOnboarder:
+    def __init__(self, user_home: Path):
+        self.user_home = Path(user_home).expanduser().resolve()
+
+    def _inspect(self, package: Path) -> ProfilePackageManifest:
+        try:
+            with zipfile.ZipFile(package) as zf:
+                data = json.loads(zf.read("manifest.json").decode("utf-8"))
+                if data.get("profile_protocol_version") != 1 or data.get("package_type") != "PROJECT_PROFILE":
+                    raise OnboardingError("unsupported project profile package")
+                for info in zf.infolist():
+                    _safe_zip_name(info.filename)
+                    mode = (info.external_attr >> 16) & 0xFFFF
+                    if stat.S_ISLNK(mode):
+                        raise OnboardingError("symlink is not allowed in profile package")
+        except (zipfile.BadZipFile, KeyError, json.JSONDecodeError) as exc:
+            raise OnboardingError("invalid project profile package") from exc
+        files = {str(k): str(v) for k, v in dict(data.get("files") or {}).items()}
+        if set(files) != _ALLOWED_PROFILE_FILES:
+            raise OnboardingError("profile package may only contain the three .xp metadata files")
+        return ProfilePackageManifest(
+            project_id=str(data["project_id"]),
+            project_name=str(data["project_name"]),
+            expected_branch=str(data["expected_branch"]),
+            expected_head_prefix=str(data["expected_head_prefix"]),
+            required_file_hashes={str(k): str(v) for k, v in dict(data.get("required_file_hashes") or {}).items()},
+            files=files,
+        )
+
+    def validate_target(self, repo: Path, package: Path) -> ProfilePackageManifest:
+        repo = Path(repo).expanduser().resolve()
+        package = Path(package).expanduser().resolve()
+        if not (repo / ".git").exists():
+            raise OnboardingError("target is not a Git repository")
+        manifest = self._inspect(package)
+        branch = _git(repo, "branch", "--show-current")
+        head = _git(repo, "rev-parse", "HEAD")
+        dirty_before = _git(repo, "status", "--porcelain")
+        if dirty_before:
+            raise OnboardingError("repository must be clean before XP onboarding")
+        if branch != manifest.expected_branch:
+            raise OnboardingError(f"branch mismatch: expected {manifest.expected_branch}, got {branch}")
+        if not head.startswith(manifest.expected_head_prefix):
+            raise OnboardingError("HEAD does not match the approved profile package")
+        for rel, expected in manifest.required_file_hashes.items():
+            safe = _safe_zip_name(rel)
+            target = (repo / Path(*safe.parts)).resolve()
+            if repo not in target.parents or not target.is_file():
+                raise OnboardingError(f"required anchor missing: {rel}")
+            if _sha(target) != expected:
+                raise OnboardingError(f"anchor hash mismatch: {rel}")
+        if (repo / ".xp").exists():
+            raise OnboardingError("project already contains .xp metadata; use profile audit/update instead")
+        return manifest
+
+    def apply(self, repo: Path, package: Path) -> ProjectProfile:
+        repo = Path(repo).expanduser().resolve()
+        package = Path(package).expanduser().resolve()
+        manifest = self.validate_target(repo, package)
+        xp_dir = repo / ".xp"
+        staged: dict[str, bytes] = {}
+        with zipfile.ZipFile(package) as zf:
+            for rel, expected in manifest.files.items():
+                data = zf.read("files/" + rel)
+                if hashlib.sha256(data).hexdigest() != expected:
+                    raise OnboardingError(f"profile file checksum mismatch: {rel}")
+                staged[rel] = data
+        try:
+            project_data = json.loads(staged[".xp/project.json"].decode("utf-8"))
+            candidate_profile = ProjectProfile.from_dict(project_data)
+            ProjectRegistry.for_home(self.user_home).assert_can_register(candidate_profile)
+        except (ProjectIdentityError, ValueError, json.JSONDecodeError) as exc:
+            raise OnboardingError(f"project registry conflict: {exc}") from exc
+        try:
+            xp_dir.mkdir()
+            for rel, data in staged.items():
+                target = repo / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                tmp = target.with_name(target.name + f".xp-{os.getpid()}.tmp")
+                tmp.write_bytes(data)
+                os.replace(tmp, target)
+            profile = load_project_profile(repo)
+            if profile.project_id != manifest.project_id or profile.name != manifest.project_name:
+                raise OnboardingError("installed profile identity does not match package manifest")
+            _git(repo, "add", ".xp")
+            _git(repo, "commit", "-m", f"chore(xp): add XP project profile for {manifest.project_id}")
+            ProjectRegistry.for_home(self.user_home).register(profile, repo)
+            return profile
+        except Exception:
+            if xp_dir.exists():
+                import shutil
+                shutil.rmtree(xp_dir, ignore_errors=True)
+            raise
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/packages.py #####
+from __future__ import annotations
+
+import hashlib
+import json
+import shutil
+import stat
+import zipfile
+from dataclasses import dataclass, field
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+from . import __version__
+
+ALLOWED_OPERATIONS = {
+    "APPLY_PATCH",
+    "ADD_FILE",
+    "REPLACE_FILE",
+    "DELETE_ALLOWED_FILE",
+    "REGISTER_MIGRATION",
+    "RUN_SOURCE_VERIFY",
+    "APPLY_DB_MIGRATION",
+    "RUN_SQL_TEST",
+    "GENERATE_CHECKPOINT",
+}
+
+
+class PackageError(ValueError):
+    pass
+
+
+class UnsafeArchiveError(PackageError):
+    pass
+
+
+@dataclass(frozen=True)
+class RunContext:
+    project_id: str
+    stage: str
+    base_fingerprint: str
+    run_id: str | None = None
+    incident_id: str | None = None
+    incident_challenge: str | None = None
+    human_qa: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PackageManifest:
+    path: Path
+    protocol_version: int
+    min_xp_version: str
+    package_type: str
+    project_id: str
+    run_id: str | None
+    milestone: str | None
+    base_fingerprint: str
+    expected_state: str
+    allowed_paths: tuple[str, ...]
+    operations: tuple[dict[str, Any], ...]
+    checksums: dict[str, str]
+    incident_id: str | None = None
+    incident_challenge: str | None = None
+    human_qa: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ValidationReport:
+    status: str
+    reasons: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StagedPackage:
+    root: Path
+    manifest: PackageManifest
+
+
+def _version_tuple(value: str) -> tuple[int, int, int]:
+    raw = value.split("-", 1)[0]
+    parts = raw.split(".")
+    nums = [int(p) if p.isdigit() else 0 for p in parts[:3]]
+    while len(nums) < 3:
+        nums.append(0)
+    return tuple(nums)  # type: ignore[return-value]
+
+
+def _safe_member_name(name: str) -> PurePosixPath:
+    if not name or "\\" in name:
+        raise UnsafeArchiveError(f"Unsafe archive member: {name!r}")
+    p = PurePosixPath(name)
+    if p.is_absolute() or any(part in {"", ".", ".."} for part in p.parts):
+        raise UnsafeArchiveError(f"Unsafe archive member: {name!r}")
+    return p
+
+
+def _is_zip_symlink(info: zipfile.ZipInfo) -> bool:
+    mode = (info.external_attr >> 16) & 0xFFFF
+    return stat.S_ISLNK(mode)
+
+
+def inspect_package(path: Path) -> PackageManifest:
+    path = Path(path)
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            try:
+                raw = zf.read("manifest.json")
+            except KeyError as exc:
+                raise PackageError("Missing manifest.json") from exc
+    except zipfile.BadZipFile as exc:
+        raise PackageError("Invalid ZIP package") from exc
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        raise PackageError("Invalid package manifest JSON") from exc
+    required = [
+        "protocol_version",
+        "min_xp_version",
+        "package_type",
+        "project_id",
+        "base_fingerprint",
+        "expected_state",
+        "allowed_paths",
+        "operations",
+        "checksums",
+    ]
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise PackageError(f"Missing manifest fields: {', '.join(missing)}")
+    return PackageManifest(
+        path=path,
+        protocol_version=int(data["protocol_version"]),
+        min_xp_version=str(data["min_xp_version"]),
+        package_type=str(data["package_type"]),
+        project_id=str(data["project_id"]),
+        run_id=data.get("run_id"),
+        milestone=data.get("milestone"),
+        base_fingerprint=str(data["base_fingerprint"]),
+        expected_state=str(data["expected_state"]),
+        allowed_paths=tuple(str(v) for v in data["allowed_paths"]),
+        operations=tuple(dict(v) for v in data["operations"]),
+        checksums={str(k): str(v) for k, v in dict(data["checksums"]).items()},
+        incident_id=data.get("incident_id"),
+        incident_challenge=data.get("incident_challenge"),
+        human_qa=tuple(str(v) for v in data.get("human_qa", [])),
+    )
+
+
+def validate_package(manifest: PackageManifest, context: RunContext) -> ValidationReport:
+    reasons: list[str] = []
+    if manifest.protocol_version != 1:
+        reasons.append("unsupported package protocol")
+    if _version_tuple(__version__) < _version_tuple(manifest.min_xp_version):
+        reasons.append("XP version is too old")
+    if manifest.project_id != context.project_id:
+        reasons.append("project mismatch")
+    if manifest.base_fingerprint != context.base_fingerprint:
+        reasons.append("base source mismatch")
+    if manifest.expected_state != context.stage:
+        reasons.append("workflow state mismatch")
+    for operation in manifest.operations:
+        if operation.get("type") not in ALLOWED_OPERATIONS:
+            reasons.append(f"unsupported operation {operation.get('type')}")
+        path = operation.get("path")
+        if path is not None:
+            try:
+                member = _safe_member_name(str(path))
+            except UnsafeArchiveError:
+                reasons.append("unsafe operation path")
+                continue
+            if not any(str(member).startswith(prefix.rstrip("/") + "/") or str(member) == prefix.rstrip("/") for prefix in manifest.allowed_paths):
+                reasons.append(f"operation path outside allowed scope: {path}")
+    if manifest.package_type == "REMEDIATION":
+        if not context.run_id or not context.incident_id or not context.incident_challenge:
+            reasons.append("no active incident context")
+        if manifest.run_id != context.run_id:
+            reasons.append("run mismatch")
+        if manifest.incident_id != context.incident_id:
+            reasons.append("incident mismatch")
+        if manifest.incident_challenge != context.incident_challenge:
+            reasons.append("incident challenge mismatch")
+    return ValidationReport("ERROR" if reasons else "CLEAR", tuple(reasons))
+
+
+def stage_package(path: Path, staging_root: Path) -> StagedPackage:
+    manifest = inspect_package(path)
+    staging_root = Path(staging_root)
+    if staging_root.exists():
+        shutil.rmtree(staging_root)
+    staging_root.mkdir(parents=True, exist_ok=True)
+    root_resolved = staging_root.resolve()
+    with zipfile.ZipFile(path, "r") as zf:
+        infos = zf.infolist()
+        for info in infos:
+            member = _safe_member_name(info.filename)
+            if _is_zip_symlink(info):
+                raise UnsafeArchiveError(f"Symlink not allowed: {info.filename}")
+            target = (staging_root / Path(*member.parts)).resolve()
+            if target != root_resolved and root_resolved not in target.parents:
+                raise UnsafeArchiveError(f"Archive escapes staging root: {info.filename}")
+            if not info.is_dir() and info.filename != "manifest.json" and info.filename not in manifest.checksums:
+                raise PackageError(f"Unchecksummed package file: {info.filename}")
+        for name in manifest.checksums:
+            _safe_member_name(name)
+        for info in infos:
+            member = _safe_member_name(info.filename)
+            target = staging_root / Path(*member.parts)
+            if info.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            data = zf.read(info)
+            expected = manifest.checksums.get(info.filename)
+            if info.filename != "manifest.json" and expected is not None:
+                actual = hashlib.sha256(data).hexdigest()
+                if actual != expected:
+                    raise PackageError(f"Checksum mismatch: {info.filename}")
+            target.write_bytes(data)
+    for name, expected in manifest.checksums.items():
+        target = staging_root / name
+        if not target.exists():
+            raise PackageError(f"Missing checksummed file: {name}")
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        if actual != expected:
+            raise PackageError(f"Checksum mismatch: {name}")
+    return StagedPackage(staging_root, manifest)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/paths.py #####
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class XPPaths:
+    home: Path
+    root: Path
+    runs: Path
+    projects: Path
+    locks: Path
+    logs: Path
+    backups: Path
+    handoffs: Path
+    packages: Path
+    versions: Path
+    checkpoints: Path
+    config: Path
+
+    @classmethod
+    def from_home(cls, home: Path) -> "XPPaths":
+        home = Path(home).expanduser().resolve()
+        root = home / ".expert-workstation"
+        return cls(
+            home=home,
+            root=root,
+            runs=root / "runs",
+            projects=root / "projects",
+            locks=root / "locks",
+            logs=root / "logs",
+            backups=root / "backups",
+            handoffs=root / "handoffs",
+            packages=root / "packages",
+            versions=root / "versions",
+            checkpoints=root / "checkpoints",
+            config=root / "config",
+        )
+
+    def ensure_runtime_dirs(self) -> None:
+        for path in (
+            self.root,
+            self.runs,
+            self.projects,
+            self.locks,
+            self.logs,
+            self.backups,
+            self.handoffs,
+            self.packages,
+            self.versions,
+            self.checkpoints,
+            self.config,
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/project_registry.py #####
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .paths import XPPaths
+
+
+class ProjectIdentityError(ValueError):
+    pass
+
+
+class ProjectProfileError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class ProjectProfile:
+    project_id: str
+    name: str
+    profile_version: int = 1
+    runtimes: tuple[str, ...] = ()
+    source_adapter: str | None = None
+    database_adapter: str | None = None
+    verify_adapter: str | None = None
+    deployment_adapter: str | None = None
+    metadata: dict = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ProjectProfile":
+        if int(data.get("profile_version", 1)) != 1:
+            raise ProjectProfileError("Unsupported project profile version")
+        project_id = str(data.get("project_id", "")).strip()
+        name = str(data.get("name", "")).strip()
+        if not project_id or not name:
+            raise ProjectProfileError("project_id and name are required")
+        return cls(
+            project_id=project_id,
+            name=name,
+            profile_version=1,
+            runtimes=tuple(str(v) for v in data.get("runtimes", [])),
+            source_adapter=data.get("source_adapter"),
+            database_adapter=data.get("database_adapter"),
+            verify_adapter=data.get("verify_adapter"),
+            deployment_adapter=data.get("deployment_adapter"),
+            metadata=dict(data.get("metadata") or {}),
+        )
+
+    def to_dict(self) -> dict:
+        value = asdict(self)
+        value["runtimes"] = list(self.runtimes)
+        return value
+
+
+@dataclass(frozen=True)
+class ProjectSummary:
+    project_id: str
+    name: str
+    repo_path: str | None
+    last_active_at: str | None
+    status: str = "LOCAL"
+    remote_url: str | None = None
+
+
+def load_project_profile(repo: Path) -> ProjectProfile:
+    path = Path(repo) / ".xp" / "project.json"
+    if not path.exists():
+        raise ProjectProfileError(f"Missing project profile: {path}")
+    return ProjectProfile.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def validate_project_identity(expected_project_id: str, profile: ProjectProfile) -> None:
+    if profile.project_id != expected_project_id:
+        raise ProjectIdentityError(
+            f"Project identity mismatch: expected {expected_project_id}, got {profile.project_id}"
+        )
+
+
+class ProjectRegistry:
+    def __init__(self, paths: XPPaths):
+        self.paths = paths
+        self.path = paths.root / "registry.json"
+
+    @classmethod
+    def for_home(cls, home: Path) -> "ProjectRegistry":
+        return cls(XPPaths.from_home(home))
+
+    def _load(self) -> dict:
+        if not self.path.exists():
+            return {"version": 1, "projects": {}, "last_active": None}
+        data = json.loads(self.path.read_text(encoding="utf-8"))
+        if data.get("version") != 1:
+            raise ProjectProfileError("Unsupported registry version")
+        return data
+
+    def _save(self, data: dict) -> None:
+        self.paths.ensure_runtime_dirs()
+        tmp = self.path.with_suffix(f".{os.getpid()}.tmp")
+        payload = json.dumps(data, indent=2, sort_keys=True) + "\n"
+        with tmp.open("w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, self.path)
+
+    @staticmethod
+    def _remote_url(repo_path: Path | None) -> str | None:
+        if not repo_path:
+            return None
+        try:
+            completed = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=Path(repo_path),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        return completed.stdout.strip() or None
+
+    def assert_can_register(self, profile: ProjectProfile) -> None:
+        data = self._load()
+        current = data["projects"].get(profile.project_id)
+        if current and current.get("name") != profile.name:
+            raise ProjectIdentityError(f"Project ID {profile.project_id} already registered")
+
+    def register(self, profile: ProjectProfile, repo_path: Path | None) -> None:
+        self.assert_can_register(profile)
+        data = self._load()
+        now = datetime.now(timezone.utc).isoformat()
+        data["projects"][profile.project_id] = {
+            "project_id": profile.project_id,
+            "name": profile.name,
+            "repo_path": str(Path(repo_path).resolve()) if repo_path else None,
+            "last_active_at": now,
+            "status": "LOCAL" if repo_path else "REMOTE_ONLY",
+            "remote_url": self._remote_url(repo_path),
+        }
+        data["last_active"] = profile.project_id
+        self._save(data)
+
+    def activate(self, project_id: str) -> ProjectSummary:
+        data = self._load()
+        item = data["projects"].get(project_id)
+        if not item:
+            raise ProjectProfileError(f"Unknown project: {project_id}")
+        now = datetime.now(timezone.utc).isoformat()
+        item["last_active_at"] = now
+        data["last_active"] = project_id
+        self._save(data)
+        return ProjectSummary(**item)
+
+    def list_projects(self) -> list[ProjectSummary]:
+        data = self._load()
+        values = [ProjectSummary(**item) for item in data["projects"].values()]
+        return sorted(values, key=lambda item: item.last_active_at or "", reverse=True)
+
+    def last_active(self) -> ProjectSummary | None:
+        data = self._load()
+        project_id = data.get("last_active")
+        if not project_id:
+            return None
+        item = data["projects"].get(project_id)
+        return ProjectSummary(**item) if item else None
+
+    def export_data(self) -> dict:
+        return self._load()
+
+    def restore_remote(self, data: dict) -> None:
+        if data.get("version") != 1:
+            raise ProjectProfileError("Unsupported registry version")
+        restored = {"version": 1, "projects": {}, "last_active": data.get("last_active")}
+        for project_id, item in (data.get("projects") or {}).items():
+            restored["projects"][project_id] = {
+                "project_id": str(item["project_id"]),
+                "name": str(item["name"]),
+                "repo_path": None,
+                "last_active_at": item.get("last_active_at"),
+                "status": "REMOTE_ONLY",
+                "remote_url": item.get("remote_url"),
+            }
+        if restored["last_active"] not in restored["projects"]:
+            restored["last_active"] = None
+        self._save(restored)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/readiness.py #####
+from __future__ import annotations
+
+import json
+import os
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+
+from .adapters.git import GitAdapter
+from .adapters.postgresql import PostgreSQLAdapter
+from .config import XPConfig
+from .project_registry import ProjectRegistry, load_project_profile
+
+
+@dataclass(frozen=True)
+class ReadinessCheck:
+    code: str
+    level: str  # CLEAR | INFO | WARNING | BLOCKER
+    title: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class ReadinessReport:
+    overall: str  # READY | READY_WITH_LIMITATIONS | NOT_READY
+    project_name: str | None
+    checks: tuple[ReadinessCheck, ...]
+
+
+def _add(checks: list[ReadinessCheck], code: str, level: str, title: str, detail: str) -> None:
+    checks.append(ReadinessCheck(code, level, title, detail))
+
+
+def audit_workstation(home: Path, *, check_database_connection: bool = True) -> ReadinessReport:
+    home = Path(home).expanduser().resolve()
+    checks: list[ReadinessCheck] = []
+
+    # Core workstation requirements.
+    for command in ("python", "git"):
+        if shutil.which(command):
+            _add(checks, f"CORE_{command.upper()}", "CLEAR", command, "Tersedia")
+        else:
+            _add(checks, f"CORE_{command.upper()}", "BLOCKER", command, "Belum tersedia")
+
+    root = home / ".expert-workstation"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        writable = os.access(root, os.W_OK)
+    except OSError:
+        writable = False
+    _add(checks, "STATE_STORAGE", "CLEAR" if writable else "BLOCKER", "Penyimpanan XP", "Siap" if writable else "Tidak dapat ditulis")
+
+    registry = ProjectRegistry.for_home(home)
+    project = registry.last_active()
+    if not project:
+        overall = "NOT_READY" if any(c.level == "BLOCKER" for c in checks) else "READY_WITH_LIMITATIONS"
+        _add(checks, "PROJECT", "WARNING", "Project aktif", "Belum ada project aktif")
+        return ReadinessReport(overall, None, tuple(checks))
+
+    project_name = project.name
+    if not project.repo_path:
+        _add(checks, "PROJECT_SOURCE", "BLOCKER", "Source project", "Project masih remote-only")
+        return ReadinessReport("NOT_READY", project_name, tuple(checks))
+
+    repo = Path(project.repo_path)
+    try:
+        profile = load_project_profile(repo)
+    except Exception as exc:
+        _add(checks, "PROJECT_PROFILE", "BLOCKER", "Profile project", f"Tidak valid: {exc}")
+        return ReadinessReport("NOT_READY", project_name, tuple(checks))
+    _add(checks, "PROJECT_PROFILE", "CLEAR", "Profile project", "Valid")
+
+    compatibility_path = repo / ".xp" / "compatibility.json"
+    try:
+        compatibility = json.loads(compatibility_path.read_text(encoding="utf-8")) if compatibility_path.exists() else {}
+    except Exception as exc:
+        _add(checks, "COMPATIBILITY", "BLOCKER", "Compatibility profile", f"Tidak valid: {exc}")
+        compatibility = {}
+
+    required = [str(x) for x in compatibility.get("required_commands", [])]
+    db_commands = [str(x) for x in compatibility.get("database_commands", [])]
+    for command in required:
+        level = "CLEAR" if shutil.which(command) else "BLOCKER"
+        _add(checks, f"COMMAND_{command.upper()}", level, f"Aplikasi {command}", "Tersedia" if level == "CLEAR" else "Belum tersedia")
+    for command in db_commands:
+        level = "CLEAR" if shutil.which(command) else "BLOCKER"
+        _add(checks, f"COMMAND_{command.upper()}", level, f"Aplikasi {command}", "Tersedia" if level == "CLEAR" else "Belum tersedia")
+
+    try:
+        state = GitAdapter(repo).state(fetch=False)
+    except Exception as exc:
+        _add(checks, "GIT_STATE", "BLOCKER", "Git state", f"Tidak dapat diperiksa: {exc}")
+        state = None
+
+    policies_path = repo / ".xp" / "policies.json"
+    try:
+        policies = json.loads(policies_path.read_text(encoding="utf-8")) if policies_path.exists() else {}
+    except Exception as exc:
+        _add(checks, "POLICY", "BLOCKER", "Policy project", f"Tidak valid: {exc}")
+        policies = {}
+
+    if state is not None:
+        protected = {str(x) for x in policies.get("protected_branches", [])}
+        allowed_prefixes = tuple(str(x) for x in policies.get("allowed_branch_prefixes", []))
+        if state.branch in protected:
+            _add(checks, "BRANCH_POLICY", "BLOCKER", "Branch kerja", f"Branch {state.branch} dilindungi")
+        elif state.branch and allowed_prefixes and not state.branch.startswith(allowed_prefixes):
+            _add(checks, "BRANCH_POLICY", "BLOCKER", "Branch kerja", f"Branch {state.branch} di luar prefix yang diizinkan")
+        else:
+            _add(checks, "BRANCH_POLICY", "CLEAR", "Branch kerja", state.branch or "Detached HEAD")
+        _add(checks, "WORKING_TREE", "WARNING" if state.dirty else "CLEAR", "Kondisi source", "Ada perubahan lokal" if state.dirty else "Bersih")
+        _add(checks, "GIT_REMOTE", "CLEAR" if state.remote else "WARNING", "Git remote", "Tersedia" if state.remote else "Belum ada origin remote")
+        if state.remote:
+            if state.fetch_checked and state.fetch_ok is False:
+                _add(checks, "GIT_SYNC", "WARNING", "Sinkronisasi Git", "Remote belum dapat diverifikasi; periksa jaringan/auth Git")
+            elif not state.upstream:
+                _add(checks, "GIT_SYNC", "WARNING", "Sinkronisasi Git", "Branch kerja belum memiliki upstream remote")
+            elif state.diverged or state.behind:
+                detail = f"Remote lebih maju {state.behind} commit" + (f" dan lokal lebih maju {state.ahead} commit" if state.ahead else "")
+                _add(checks, "GIT_SYNC", "BLOCKER", "Sinkronisasi Git", detail + "; wajib direkonsiliasi sebelum eksekusi")
+            elif state.ahead:
+                _add(checks, "GIT_SYNC", "WARNING", "Sinkronisasi Git", f"{state.ahead} commit lokal belum terlindungi di remote")
+            else:
+                _add(checks, "GIT_SYNC", "CLEAR", "Sinkronisasi Git", "Tidak ada selisih yang terdeteksi dari upstream lokal")
+
+    cfg = XPConfig.for_home(home)
+    control_ok = bool(cfg.control_repo and (Path(cfg.control_repo) / ".git").exists())
+    _add(checks, "REMOTE_RECOVERY", "CLEAR" if control_ok else "WARNING", "Remote recovery", "Aktif" if control_ok else "Belum dikonfigurasi")
+    gh_available = shutil.which("gh") is not None
+    if control_ok:
+        _add(checks, "GITHUB_CLI", "CLEAR" if gh_available else "INFO", "GitHub CLI", "Tersedia" if gh_available else "Tidak diperlukan untuk workflow lokal saat ini")
+    else:
+        _add(checks, "GITHUB_CLI", "CLEAR" if gh_available else "WARNING", "GitHub CLI", "Siap untuk aktivasi recovery" if gh_available else "Belum tersedia; dibutuhkan untuk setup recovery GitHub otomatis")
+
+    if profile.database_adapter == "postgresql":
+        has_url = bool(os.environ.get("DATABASE_URL"))
+        _add(checks, "DATABASE_CREDENTIAL", "CLEAR" if has_url else "WARNING", "Credential database", "Tersedia" if has_url else "Belum dikonfigurasi di perangkat")
+        if check_database_connection and has_url and shutil.which("psql"):
+            env = PostgreSQLAdapter().environment_status(check_connection=True)
+            _add(checks, "DATABASE_CONNECTION", "CLEAR" if env.connection_ok else "WARNING", "Koneksi database", "Terhubung" if env.connection_ok else "Belum dapat dijangkau")
+    else:
+        _add(checks, "DATABASE", "INFO", "Database", "Tidak digunakan atau belum dideklarasikan")
+
+    deployment = dict(policies.get("deployment") or {})
+    if profile.deployment_adapter:
+        _add(checks, "PRODUCTION_DEPLOY", "INFO", "Production deploy", f"Adapter: {profile.deployment_adapter}")
+    elif deployment.get("production") == "DISABLED":
+        _add(checks, "PRODUCTION_DEPLOY", "INFO", "Production deploy", "Sengaja dinonaktifkan sampai mekanisme diverifikasi")
+    else:
+        _add(checks, "PRODUCTION_DEPLOY", "WARNING", "Production deploy", "Belum dikonfigurasi")
+
+    if any(c.level == "BLOCKER" for c in checks):
+        overall = "NOT_READY"
+    elif any(c.level == "WARNING" for c in checks):
+        overall = "READY_WITH_LIMITATIONS"
+    else:
+        overall = "READY"
+    return ReadinessReport(overall, project_name, tuple(checks))
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/recovery.py #####
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .journal import Journal
+from .models import RunState
+
+
+@dataclass(frozen=True)
+class RecoveryDecision:
+    status: str
+    operation: str | None
+    message: str
+
+
+class RecoveryEngine:
+    SAFE_RETRY_OPERATIONS = {"SOURCE_VERIFY", "BUILD", "TEST", "REMOTE_SAFEPOINT"}
+    CRITICAL_OPERATIONS = {"DB_APPLY", "SOURCE_APPLY", "LOCKING"}
+
+    def __init__(self, journal: Journal):
+        self.journal = journal
+
+    def inspect(self, run: RunState) -> RecoveryDecision:
+        interrupted = self.journal.interrupted_operation()
+        if not interrupted:
+            return RecoveryDecision("NO_INTERRUPTION", None, "No interrupted operation found.")
+        operation = str(interrupted.get("operation"))
+        if operation in self.SAFE_RETRY_OPERATIONS:
+            return RecoveryDecision("SAFE_RETRY", operation, "Operation is idempotent/safe to rerun.")
+        if operation in self.CRITICAL_OPERATIONS:
+            return RecoveryDecision(
+                "RECOVERY_REQUIRED",
+                operation,
+                "Critical operation was interrupted; inspect actual project/database state before resuming.",
+            )
+        return RecoveryDecision("RECOVERY_REQUIRED", operation, "Unknown interrupted operation requires audit.")
+
+
+class ProjectRecoveryError(RuntimeError):
+    pass
+
+
+class ProjectRecoveryManager:
+    """Restore a REMOTE_ONLY project source without guessing project identity.
+
+    Recovery uses the remote URL saved in the sanitized registry and, when an
+    active run records one, the work branch saved in the run state. The cloned
+    repository must contain matching ``.xp`` project metadata before it is
+    promoted back to LOCAL state.
+    """
+
+    def __init__(self, home):
+        from pathlib import Path
+        from .paths import XPPaths
+        from .project_registry import ProjectRegistry
+        from .state_store import StateStore
+
+        self.home = Path(home).expanduser().resolve()
+        self.paths = XPPaths.from_home(self.home)
+        self.paths.ensure_runtime_dirs()
+        self.registry = ProjectRegistry(self.paths)
+        self.store = StateStore(self.paths)
+
+    def _latest_run(self, project_id: str):
+        candidates = []
+        if not self.paths.runs.exists():
+            return None
+        for state_file in self.paths.runs.glob("*/state.json"):
+            try:
+                state = self.store.load(state_file.parent.name)
+            except Exception:
+                continue
+            if state.project_id == project_id:
+                candidates.append((state_file.stat().st_mtime, state))
+        return max(candidates, key=lambda item: item[0])[1] if candidates else None
+
+    def recover(self, project_id: str, *, destination=None):
+        import subprocess
+        from pathlib import Path
+        from .project_registry import load_project_profile
+
+        projects = {item.project_id: item for item in self.registry.list_projects()}
+        summary = projects.get(project_id)
+        if summary is None:
+            raise ProjectRecoveryError(f"Unknown project: {project_id}")
+        if not summary.remote_url:
+            raise ProjectRecoveryError("Project has no recoverable Git remote URL")
+        if destination is None:
+            destination = self.home / "projects" / project_id
+        destination = Path(destination).expanduser().resolve()
+        if destination.exists():
+            raise ProjectRecoveryError(f"Recovery destination already exists: {destination}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+
+        run = self._latest_run(project_id)
+        branch = str(run.metadata.get("branch")) if run and run.metadata.get("branch") else None
+        cmd = ["git", "clone"]
+        if branch:
+            cmd += ["--branch", branch, "--single-branch"]
+        cmd += [summary.remote_url, str(destination)]
+        result = subprocess.run(cmd, text=True, capture_output=True)
+        if result.returncode != 0:
+            import shutil
+            shutil.rmtree(destination, ignore_errors=True)
+            raise ProjectRecoveryError(result.stderr.strip() or result.stdout.strip() or "git clone failed")
+        try:
+            profile = load_project_profile(destination)
+            if profile.project_id != project_id:
+                raise ProjectRecoveryError(
+                    f"Recovered source identity mismatch: expected {project_id}, got {profile.project_id}"
+                )
+            self.registry.register(profile, destination)
+        except Exception:
+            import shutil
+            shutil.rmtree(destination, ignore_errors=True)
+            raise
+        return destination
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/redaction.py #####
+import re
+from collections.abc import Iterable, Mapping
+
+SENSITIVE_KEYS = {
+    "token",
+    "password",
+    "passwd",
+    "secret",
+    "api_key",
+    "apikey",
+    "database_url",
+    "authorization",
+    "access_token",
+    "refresh_token",
+    "private_key",
+}
+
+_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(DATABASE_URL|TOKEN|PASSWORD|PASSWD|SECRET|API_KEY|APIKEY|ACCESS_TOKEN|REFRESH_TOKEN|AUTHORIZATION)\s*=\s*([^\s]+)"
+)
+_URI_CREDENTIAL_RE = re.compile(r"(?i)(postgres(?:ql)?://)([^\s/@:]+):([^@\s]+)@")
+_GENERIC_URI_USERINFO_RE = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)([^/\s@]+)@")
+_KNOWN_TOKEN_RE = re.compile(r"(?i)\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b")
+_BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
+
+
+def _key_sensitive(key: object) -> bool:
+    normalized = str(key).strip().lower().replace("-", "_")
+    return normalized in SENSITIVE_KEYS or normalized.endswith("_token") or normalized.endswith("_secret")
+
+
+def redact_text(text: str, known_secrets: Iterable[str] = ()) -> str:
+    out = str(text)
+    for secret in known_secrets:
+        if secret:
+            out = out.replace(str(secret), "[REDACTED]")
+    out = _ASSIGNMENT_RE.sub(lambda m: f"{m.group(1)}=[REDACTED]", out)
+    out = _URI_CREDENTIAL_RE.sub(lambda m: f"{m.group(1)}[REDACTED]@", out)
+    out = _GENERIC_URI_USERINFO_RE.sub(lambda m: f"{m.group(1)}[REDACTED]@", out)
+    out = _KNOWN_TOKEN_RE.sub("[REDACTED]", out)
+    out = _BEARER_RE.sub("Bearer [REDACTED]", out)
+    return out
+
+
+def sanitize_mapping(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {
+            str(key): "[REDACTED]" if _key_sensitive(key) else sanitize_mapping(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [sanitize_mapping(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(sanitize_mapping(item) for item in value)
+    if isinstance(value, str):
+        return redact_text(value)
+    return value
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/state_store.py #####
+import json
+import os
+from dataclasses import replace
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .models import RunState
+from .paths import XPPaths
+
+
+class StateNotFoundError(FileNotFoundError):
+    pass
+
+
+class StateStore:
+    def __init__(self, paths: XPPaths):
+        self.paths = paths
+
+    def _run_dir(self, run_id: str) -> Path:
+        return self.paths.runs / run_id
+
+    def save(self, state: RunState) -> None:
+        self.paths.ensure_runtime_dirs()
+        run_dir = self._run_dir(state.run_id)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        final_path = run_dir / "state.json"
+        tmp_path = run_dir / f"state.{os.getpid()}.tmp"
+        updated = replace(state, updated_at=datetime.now(timezone.utc).isoformat())
+        payload = json.dumps(updated.to_dict(), indent=2, sort_keys=True) + "\n"
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, final_path)
+        try:
+            dir_fd = os.open(run_dir, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
+
+    def load(self, run_id: str) -> RunState:
+        path = self._run_dir(run_id) / "state.json"
+        if not path.exists():
+            raise StateNotFoundError(run_id)
+        return RunState.from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/storage.py #####
+from __future__ import annotations
+
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class StorageReport:
+    ok: bool
+    free_bytes: int
+    required_bytes: int
+    path: Path
+
+
+class StorageManager:
+    def __init__(self, path: Path):
+        self.path = Path(path)
+
+    def preflight(self, required_bytes: int) -> StorageReport:
+        usage = shutil.disk_usage(self.path)
+        return StorageReport(
+            ok=usage.free >= required_bytes,
+            free_bytes=usage.free,
+            required_bytes=required_bytes,
+            path=self.path,
+        )
+
+    def cleanup_oldest(self, directory: Path, keep: int = 3, pattern: str = "*") -> list[Path]:
+        directory = Path(directory)
+        if not directory.exists():
+            return []
+        candidates = [p for p in directory.glob(pattern) if p.is_file()]
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        removed: list[Path] = []
+        for path in candidates[keep:]:
+            path.unlink(missing_ok=True)
+            removed.append(path)
+        return removed
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/ui.py #####
+from __future__ import annotations
+
+import sys
+
+PRODUCT_NAME = "EXPERT WORKSTATION"
+ENGINE_NAME = "XP"
+BYLINE = "by Rahmawan"
+
+
+def clear_screen() -> None:
+    """Clear an interactive terminal without polluting redirected test/log output."""
+    if sys.stdout.isatty():
+        print("\033[2J\033[H", end="", flush=True)
+
+
+def header() -> None:
+    print("╔══════════════════════════════════════╗")
+    print("║          EXPERT WORKSTATION          ║")
+    print("║                 XP                   ║")
+    print("╚══════════════════════════════════════╝")
+    print("              by Rahmawan")
+    print()
+
+
+def wait_for_enter() -> None:
+    """Pause only for a real human terminal; automation/tests continue immediately."""
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        try:
+            input("\nTekan Enter untuk kembali...")
+        except (EOFError, KeyboardInterrupt):
+            print()
+
+
+def human_path(path) -> str:
+    """Prefer a short, human-facing path for artifacts under Downloads."""
+    text = str(path)
+    marker = "/storage/downloads/"
+    if marker in text:
+        return "Download/" + text.split(marker, 1)[1]
+    return getattr(path, "name", text)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/warnings.py #####
+from __future__ import annotations
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class WarningClassification:
+    status: str
+    known: tuple[str, ...]
+    unknown: tuple[str, ...]
+
+
+def classify_warnings(text: str, *, known_markers: list[str] | tuple[str, ...], detect_markers: list[str] | tuple[str, ...]) -> WarningClassification:
+    present = [m for m in detect_markers if m and m in text]
+    if not present:
+        return WarningClassification('CLEAR', (), ())
+    known_set = set(known_markers)
+    known = tuple(m for m in present if m in known_set)
+    unknown = tuple(m for m in present if m not in known_set)
+    return WarningClassification('WARNING' if unknown else 'KNOWN', known, unknown)
+
+##### FILE: /data/data/com.termux/files/home/.expert-workstation/versions/2.0.0-rc6/src/xp/workflow.py #####
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .models import RunState
+
+
+class InvalidTransition(ValueError):
+    pass
+
+
+class NetworkUnavailable(RuntimeError):
+    pass
+
+
+PRIMARY_SEQUENCE = [
+    "IDLE",
+    "PREPARING",
+    "PACKAGE_VALIDATED",
+    "SOURCE_APPLYING",
+    "SOURCE_APPLIED",
+    "SOURCE_VERIFIED",
+    "REMOTE_SAFEPOINT_PENDING",
+    "REMOTE_SAFEPOINT",
+    "DB_APPROVAL_REQUIRED",
+    "DB_APPLYING",
+    "DB_APPLIED",
+    "DB_VERIFIED",
+    "HUMAN_QA",
+    "READY_TO_LOCK",
+    "LOCKING",
+    "LOCKED_LOCAL",
+    "LOCKED_REMOTE",
+]
+SIDE_STATES = {
+    "WAITING_GPT",
+    "PAUSED_BY_USER",
+    "FAILED_SAFE",
+    "RECOVERY_REQUIRED",
+    "REMOTE_UNAVAILABLE",
+}
+
+_ALLOWED: dict[str, set[str]] = {
+    a: {b} for a, b in zip(PRIMARY_SEQUENCE, PRIMARY_SEQUENCE[1:])
+}
+_ALLOWED.update(
+    {
+        "IDLE": {"PREPARING"},
+        "REMOTE_SAFEPOINT_PENDING": {"REMOTE_SAFEPOINT", "REMOTE_UNAVAILABLE"},
+        "REMOTE_UNAVAILABLE": {"REMOTE_SAFEPOINT_PENDING", "PAUSED_BY_USER"},
+        "WAITING_GPT": {"PACKAGE_VALIDATED", "PAUSED_BY_USER"},
+        "PAUSED_BY_USER": {"PREPARING", "PACKAGE_VALIDATED", "SOURCE_APPLYING", "SOURCE_VERIFIED", "DB_APPLYING", "DB_VERIFIED", "HUMAN_QA"},
+        "RECOVERY_REQUIRED": {"PREPARING", "SOURCE_APPLYING", "DB_APPLYING", "WAITING_GPT"},
+        "FAILED_SAFE": {"WAITING_GPT", "PAUSED_BY_USER"},
+    }
+)
+for stage in list(PRIMARY_SEQUENCE):
+    _ALLOWED.setdefault(stage, set()).update({"PAUSED_BY_USER", "FAILED_SAFE", "WAITING_GPT"})
+
+
+def transition(current: str, target: str) -> str:
+    if target not in _ALLOWED.get(current, set()):
+        raise InvalidTransition(f"Invalid XP transition: {current} -> {target}")
+    return target
+
+
+@dataclass(frozen=True)
+class TransitionResult:
+    current_stage: str
+    next_stage: str
+    status: str = "CLEAR"
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class RemoteSafepointResult:
+    local_status: str
+    remote_status: str
+    message: str
+
+
+def handle_remote_safepoint(error: Exception | None) -> RemoteSafepointResult:
+    if isinstance(error, NetworkUnavailable):
+        return RemoteSafepointResult(
+            local_status="CLEAR",
+            remote_status="REMOTE_UNAVAILABLE",
+            message="Local work is clear; remote protection is pending.",
+        )
+    if error is None:
+        return RemoteSafepointResult("CLEAR", "CLEAR", "Remote safepoint created.")
+    return RemoteSafepointResult("CLEAR", "ERROR", str(error))
+
+
+class WorkflowEngine:
+    def advance(self, run: RunState) -> TransitionResult:
+        if run.stage in PRIMARY_SEQUENCE:
+            idx = PRIMARY_SEQUENCE.index(run.stage)
+            if idx == len(PRIMARY_SEQUENCE) - 1:
+                return TransitionResult(run.stage, run.stage, "KNOWN", "Already locked remotely.")
+            target = PRIMARY_SEQUENCE[idx + 1]
+            transition(run.stage, target)
+            return TransitionResult(run.stage, target)
+        raise InvalidTransition(f"Automatic advance unavailable from side state {run.stage}")
