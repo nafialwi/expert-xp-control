@@ -1,0 +1,18 @@
+{
+  "control_version": 1,
+  "registry": {
+    "last_active": "segeran-jiwa-pos-next",
+    "projects": {
+      "segeran-jiwa-pos-next": {
+        "last_active_at": "2026-09-11T03:58:19.413165+00:00",
+        "name": "Segeran Jiwa POS Next",
+        "project_id": "segeran-jiwa-pos-next",
+        "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
+        "repo_path": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "status": "LOCAL"
+      }
+    },
+    "version": 1
+  },
+  "runs": []
+}
