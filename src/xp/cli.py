@@ -1414,6 +1414,7 @@ def build_parser() -> argparse.ArgumentParser:
     proj_switch.add_argument("project_id", help="Project ID")
     sub.add_parser("upgrade", help="Upgrade XP")
     sub.add_parser("check", help="Cek dependency")
+    sub.add_parser("sweep", help="Sweep folder Download untuk file XP")
     parser_help = sub.add_parser("help", help="Tampilkan bantuan")
     parser_help.add_argument("topic", nargs="?", help="Topik bantuan")
 
@@ -1510,6 +1511,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     if args.command == "help":
         return _help_cmd(args.topic)
+    if args.command == "sweep":
+        return _sweep_cmd()
     if args.command == "upgrade":
         return _upgrade_cmd()
     if args.command == "check":
@@ -1782,6 +1785,62 @@ def _help_cmd(topic: str | None = None) -> int:
     
     content = topic_file.read_text(encoding="utf-8")
     print(content)
+    return 0
+
+
+
+
+def _sweep_cmd() -> int:
+    """Sweep folder Download untuk file XP_*.zip dan pindahkan ke folder pantauan"""
+    import shutil
+    
+    # Folder kandidat Download
+    download_dirs = [
+        Path.home() / "Downloads",
+        Path.home() / "storage" / "shared" / "Download",
+        Path("/storage/emulated/0/Download"),
+    ]
+    
+    # Folder tujuan (folder pantauan XP)
+    expert_dir = Path.home() / "storage" / "downloads" / "Expert"
+    expert_dir.mkdir(parents=True, exist_ok=True)
+    
+    print("=== Sweep Download Folders ===")
+    print(f"Target: {expert_dir}\n")
+    
+    moved = []
+    skipped = []
+    
+    for d in download_dirs:
+        if not d.exists():
+            continue
+        
+        print(f"Scanning: {d}")
+        for zip_file in d.glob("XP_*.zip"):
+            dest = expert_dir / zip_file.name
+            
+            # Cek duplikat
+            if dest.exists():
+                skipped.append((zip_file, "already exists"))
+                print(f"  SKIP {zip_file.name} (sudah ada di tujuan)")
+                continue
+            
+            # Pindahkan
+            try:
+                shutil.move(str(zip_file), str(dest))
+                moved.append((zip_file, dest))
+                print(f"  MOVED {zip_file.name}")
+            except Exception as e:
+                print(f"  ERROR {zip_file.name}: {e}")
+        print()
+    
+    print("=== Summary ===")
+    print(f"Moved: {len(moved)} files")
+    print(f"Skipped: {len(skipped)} files")
+    
+    if moved:
+        print(f"\nJalankan 'xp' lalu pilih [2] untuk scan paket yang baru dipindahkan")
+    
     return 0
 
 
