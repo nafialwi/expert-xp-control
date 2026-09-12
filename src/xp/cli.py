@@ -1415,6 +1415,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("upgrade", help="Upgrade XP")
     sub.add_parser("check", help="Cek dependency")
     sub.add_parser("sweep", help="Sweep folder Download untuk file XP")
+    sub.add_parser("handshake", help="Print panduan sambung untuk AI external")
     parser_help = sub.add_parser("help", help="Tampilkan bantuan")
     parser_help.add_argument("topic", nargs="?", help="Topik bantuan")
 
@@ -1511,6 +1512,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     if args.command == "help":
         return _help_cmd(args.topic)
+    if args.command == "handshake":
+        return _handshake_cmd()
     if args.command == "sweep":
         return _sweep_cmd()
     if args.command == "upgrade":
@@ -1841,6 +1844,18 @@ def _sweep_cmd() -> int:
     if moved:
         print(f"\nJalankan 'xp' lalu pilih [2] untuk scan paket yang baru dipindahkan")
     
+    return 0
+
+
+
+
+def _handshake_cmd() -> int:
+    """Print panduan sambung XP untuk AI external"""
+    doc = Path.home() / ".expert-workstation" / "engine" / "docs" / "handshake.md"
+    if not doc.exists():
+        print("ERROR: docs/handshake.md tidak ditemukan di engine")
+        return 1
+    print(doc.read_text(encoding="utf-8"))
     return 0
 
 
