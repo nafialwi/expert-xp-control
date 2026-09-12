@@ -1,0 +1,148 @@
+{
+  "control_version": 1,
+  "registry": {
+    "last_active": "segeran-jiwa-pos-next",
+    "projects": {
+      "qa-test-fullstack": {
+        "last_active_at": "2026-09-12T02:10:23.919635+00:00",
+        "name": "Qa Test Fullstack",
+        "project_id": "qa-test-fullstack",
+        "remote_url": null,
+        "repo_path": "/data/data/com.termux/files/home/WORKSTATION/projects/qa-test-fullstack",
+        "status": "LOCAL"
+      },
+      "qa-test-python": {
+        "last_active_at": "2026-09-12T02:09:02.258571+00:00",
+        "name": "Qa Test Python",
+        "project_id": "qa-test-python",
+        "remote_url": null,
+        "repo_path": "/data/data/com.termux/files/home/WORKSTATION/projects/qa-test-python",
+        "status": "LOCAL"
+      },
+      "segeran-jiwa-pos-legacy": {
+        "last_active_at": "2026-09-12T13:27:44.538417+00:00",
+        "name": "Segeran Jiwa Pos Legacy",
+        "project_id": "segeran-jiwa-pos-legacy",
+        "remote_url": "git@github.com:nafialwi/segeran-jiwa-qris-bridge-beta.git",
+        "repo_path": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-legacy",
+        "status": "LOCAL"
+      },
+      "segeran-jiwa-pos-next": {
+        "last_active_at": "2026-09-12T14:55:45.474883+00:00",
+        "name": "Segeran Jiwa POS Next",
+        "project_id": "segeran-jiwa-pos-next",
+        "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
+        "repo_path": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "status": "LOCAL"
+      },
+      "test-project": {
+        "last_active_at": "2026-09-12T00:51:03.301717+00:00",
+        "name": "Test Project",
+        "project_id": "test-project",
+        "remote_url": null,
+        "repo_path": "/data/data/com.termux/files/home/WORKSTATION/projects/test-project",
+        "status": "LOCAL"
+      }
+    },
+    "version": 1
+  },
+  "runs": [
+    {
+      "created_at": "2026-09-11T15:04:14.012793+00:00",
+      "metadata": {
+        "_last_stage": "LOCKED_REMOTE",
+        "base_fingerprint": "ec149687568ca5809cf0c76434af0e36edd2d81a7d1c6deba8f7b09df5d12b2d",
+        "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "docs/checkpoints/CS-04_CHECKPOINT_REPORT.md",
+          "docs/checkpoints/CS-02_CS-03_CLOSURE_AUDIT.md",
+          "docs/checkpoints/ROADMAP_PROGRESS.md"
+        ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-04-CLOSURE-d10e704a",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-04-CLOSURE-d10e704a/CHECKPOINT.md",
+        "control_sync": "CLEAR",
+        "final_head": "76d359c1bf56bb292b2d1bf8d898892dfaa8658b",
+        "head": "9a1b678f70c16f2a709efe64a5ee775d2bd507be",
+        "human_qa": {
+          "notes": "QA manusia clear melalui menu XP",
+          "status": "CLEAR",
+          "timestamp": "2026-09-11T15:41:34.859491+00:00"
+        },
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-04-CLOSURE-d10e704a/package.zip",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "resolved_incident_id": "INC-821D4C86",
+        "safepoint_head": "76d359c1bf56bb292b2d1bf8d898892dfaa8658b",
+        "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-04-CLOSURE-d10e704a/SOURCE.zip",
+        "warning_status": "KNOWN",
+        "working_fingerprint": "62af194a74e2d681d976dd083903af2005c505aa17e8a814e8c05fbf7f5dfd09"
+      },
+      "milestone": "CS-04-CLOSURE",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-04-CLOSURE-d10e704a",
+      "stage": "LOCKED_REMOTE",
+      "state_version": 1,
+      "updated_at": "2026-09-11T15:42:46.262594+00:00"
+    },
+    {
+      "created_at": "2026-09-11T16:52:42.910967+00:00",
+      "metadata": {
+        "_last_stage": "LOCKED_REMOTE",
+        "base_fingerprint": "96b8f2845003a1495ba5780bd0b24438a83993709dfa827a1f38892ca881ffb7",
+        "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "docs/blueprint/CS-05_DESIGN_SPEC.md",
+          "docs/blueprint/15_WORKFLOW_PROFILE.md"
+        ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942/CHECKPOINT.md",
+        "control_sync": "CLEAR",
+        "final_head": "ac0cb2448e2d54d139504b595c42fefaa866322d",
+        "head": "76d359c1bf56bb292b2d1bf8d898892dfaa8658b",
+        "human_qa": {
+          "notes": "QA manusia clear melalui menu XP",
+          "status": "CLEAR",
+          "timestamp": "2026-09-11T17:16:25.057750+00:00"
+        },
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942/package.zip",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "resolved_incident_id": "INC-C8F46D13",
+        "safepoint_head": "ac0cb2448e2d54d139504b595c42fefaa866322d",
+        "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942/SOURCE.zip",
+        "warning_status": "KNOWN",
+        "working_fingerprint": "2fc8ad0478c8f0e0851a0b6658e983a641dfe67a66f38fb68344acf9c0f9b6d1"
+      },
+      "milestone": "CS-05-DESIGN-SPEC",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-05-DESIGN-SPEC-f06bf942",
+      "stage": "LOCKED_REMOTE",
+      "state_version": 1,
+      "updated_at": "2026-09-11T17:17:27.380243+00:00"
+    },
+    {
+      "created_at": "2026-09-12T14:55:49.232930+00:00",
+      "metadata": {
+        "_last_stage": "PACKAGE_VALIDATED",
+        "base_fingerprint": "2adfff2c3d9e255743faf88a35cefc0326029ed9e1b70d3050b71389708934dc",
+        "branch": "work/cs06743-patch3-hardening",
+        "head": "ac0cb2448e2d54d139504b595c42fefaa866322d",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-P1-SHIFT-FOUNDATION-e8984cce/package.zip",
+        "remote_lease": "ACTIVE",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": "CS-05-P1-SHIFT-FOUNDATION",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-05-P1-SHIFT-FOUNDATION-e8984cce",
+      "stage": "PACKAGE_VALIDATED",
+      "state_version": 1,
+      "updated_at": "2026-09-12T14:55:52.753102+00:00"
+    }
+  ]
+}
