@@ -115,12 +115,18 @@ class EngineLifecycle:
         if previous is None:
             raise RuntimeError("previous engine version is missing after activation")
 
-        healthy = bool(health_check(activated.path))
+        try:
+            healthy = bool(health_check(activated.path))
+        except Exception:
+            # The candidate is already active at this point. Restore the known
+            # previous version before propagating the original health-check error.
+            self._write_atomic(self._active_file, previous)
+            raise
+
         if healthy:
             return activated
 
-        # Roll back only the active pointer. Keep previous-version as the known
-        # rollback origin/evidence and keep candidate-version cleared.
+        # A negative health result is also unsafe: restore the previous engine.
         self._write_atomic(self._active_file, previous)
         return EngineLifecycleResult(
             status="ROLLED_BACK",

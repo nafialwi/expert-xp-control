@@ -68,11 +68,6 @@ class EngineLifecycleRedTests(unittest.TestCase):
             candidate_source = self._candidate_source(home, "2.1.0-rc1")
             lifecycle.install_candidate("2.1.0-rc1", candidate_source)
 
-            self.assertTrue(
-                hasattr(lifecycle, "activate_candidate"),
-                "XP+-01 RED #2: activate_candidate() is not implemented yet",
-            )
-
             result = lifecycle.activate_candidate("2.1.0-rc1")
 
             self.assertEqual(result.status, "ACTIVATED")
@@ -93,11 +88,6 @@ class EngineLifecycleRedTests(unittest.TestCase):
             candidate_source = self._candidate_source(home, "2.1.0-rc1")
             lifecycle.install_candidate("2.1.0-rc1", candidate_source)
 
-            self.assertTrue(
-                hasattr(lifecycle, "activate_with_health_check"),
-                "XP+-01 RED #3: activate_with_health_check() is not implemented yet",
-            )
-
             observed_active = []
 
             def failing_health_check(candidate_path: Path) -> bool:
@@ -110,13 +100,47 @@ class EngineLifecycleRedTests(unittest.TestCase):
                 health_check=failing_health_check,
             )
 
-            self.assertEqual(
-                observed_active,
-                ["2.1.0-rc1"],
-                "health check must run after candidate becomes active",
-            )
+            self.assertEqual(observed_active, ["2.1.0-rc1"])
             self.assertEqual(result.status, "ROLLED_BACK")
             self.assertEqual(lifecycle.active_version(), "2.0.0-rc18.3")
+            self.assertEqual(lifecycle.previous_version(), "2.0.0-rc18.3")
+            self.assertIsNone(lifecycle.candidate_version())
+
+    def test_health_check_exception_rolls_back_before_error_is_re_raised(self):
+        EngineLifecycle = self._load_api()
+
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            root = home / ".expert-workstation"
+            root.mkdir(parents=True)
+            (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
+
+            lifecycle = EngineLifecycle(home)
+            candidate_source = self._candidate_source(home, "2.1.0-rc1")
+            lifecycle.install_candidate("2.1.0-rc1", candidate_source)
+
+            class CandidateHealthError(RuntimeError):
+                pass
+
+            def exploding_health_check(candidate_path: Path) -> bool:
+                self.assertEqual(lifecycle.active_version(), "2.1.0-rc1")
+                self.assertTrue(candidate_path.is_dir())
+                raise CandidateHealthError("candidate health check exploded")
+
+            with self.assertRaisesRegex(
+                CandidateHealthError,
+                "candidate health check exploded",
+            ):
+                lifecycle.activate_with_health_check(
+                    "2.1.0-rc1",
+                    health_check=exploding_health_check,
+                )
+
+            self.assertEqual(
+                lifecycle.active_version(),
+                "2.0.0-rc18.3",
+                "XP+-01 RED #4: active version must be restored even when health check raises",
+            )
             self.assertEqual(lifecycle.previous_version(), "2.0.0-rc18.3")
             self.assertIsNone(lifecycle.candidate_version())
 
