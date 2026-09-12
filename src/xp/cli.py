@@ -1412,6 +1412,9 @@ def build_parser() -> argparse.ArgumentParser:
     proj_sub.add_parser("list", help="List semua project terdaftar")
     proj_switch = proj_sub.add_parser("switch", help="Ganti project aktif")
     proj_switch.add_argument("project_id", help="Project ID")
+    sub.add_parser("upgrade", help="Upgrade XP")
+    sub.add_parser("check", help="Cek dependency")
+
 
     bundle = sub.add_parser("bundle")
     bundle.add_argument("--repo", required=True)
@@ -1503,6 +1506,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print("ERROR: action tidak dikenali")
             return 1
+    if args.command == "upgrade":
+        return _upgrade_cmd()
+    if args.command == "check":
+        return _check_cmd()
     if args.command == "pkg-build":
         return _pkg_build(args.repo, args.spec, args.out)
     if args.command == "lease-release":
@@ -1733,6 +1740,53 @@ def _project_switch(project_id: str) -> int:
     
     registry.activate(target.project_id)
     print(f"✓ Project aktif: {target.name} ({target.project_id})")
+    return 0
+
+
+
+def _upgrade_cmd() -> int:
+    import subprocess, shutil, re
+    paths = _paths()
+    engine_path = paths.home / "engine"
+    if not engine_path.exists():
+        print("ERROR: engine tidak ditemukan")
+        return 1
+    print("=== Upgrade XP ===")
+    subprocess.run(["git", "fetch", "origin", "xp-engine"], cwd=engine_path)
+    subprocess.run(["git", "checkout", "xp-engine"], cwd=engine_path)
+    subprocess.run(["git", "pull", "origin", "xp-engine"], cwd=engine_path)
+    init_text = (engine_path / "src" / "xp" / "__init__.py").read_text(encoding="utf-8")
+    match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', init_text)
+    if not match:
+        print("ERROR: parse version gagal")
+        return 1
+    new_version = match.group(1)
+    print(f"Versi baru: {new_version}")
+    new_dir = paths.home / "versions" / new_version
+    if new_dir.exists():
+        shutil.rmtree(new_dir)
+    new_dir.mkdir(parents=True)
+    (new_dir / "src").mkdir()
+    shutil.copytree(engine_path / "src" / "xp", new_dir / "src" / "xp")
+    (paths.home / "active-version").write_text(new_version, encoding="utf-8")
+    print(f"Upgrade ke {new_version} selesai")
+    return 0
+
+
+def _check_cmd() -> int:
+    import subprocess, shutil
+    print("=== Dependency Check ===")
+    for name, cmd in [("python", "python3"), ("node", "node"), ("git", "git"), ("psql", "psql"), ("gh", "gh")]:
+        if shutil.which(cmd):
+            result = subprocess.run([cmd, "--version"], capture_output=True, text=True)
+            version = (result.stdout.strip() or result.stderr.strip()).split("\n")[0]
+            print(f"OK {name}: {version}")
+        else:
+            print(f"MISSING {name}: tidak ditemukan")
+    if shutil.which("gh"):
+        print("=== GitHub CLI ===")
+        result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+        print("OK gh auth: logged in" if result.returncode == 0 else "MISSING gh auth: belum login")
     return 0
 
 if __name__ == "__main__":
