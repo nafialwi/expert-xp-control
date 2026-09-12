@@ -1414,6 +1414,8 @@ def build_parser() -> argparse.ArgumentParser:
     proj_switch.add_argument("project_id", help="Project ID")
     sub.add_parser("upgrade", help="Upgrade XP")
     sub.add_parser("check", help="Cek dependency")
+    parser_help = sub.add_parser("help", help="Tampilkan bantuan")
+    parser_help.add_argument("topic", nargs="?", help="Topik bantuan")
 
 
     bundle = sub.add_parser("bundle")
@@ -1506,6 +1508,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print("ERROR: action tidak dikenali")
             return 1
+    if args.command == "help":
+        return _help_cmd(args.topic)
     if args.command == "upgrade":
         return _upgrade_cmd()
     if args.command == "check":
@@ -1526,6 +1530,9 @@ def _bundle_cmd(repo_arg: str) -> int:
     import dataclasses
     from . import __version__
     repo = Path(repo_arg).expanduser().resolve()
+    if not (repo / ".xp" / "project.json").exists():
+        print(f"ERROR: {repo} bukan project XP (tidak ada .xp/project.json)")
+        return 1
     profile = load_project_profile(repo)
     paths = _paths()
     cfg = XPConfig.for_home(paths.home)
@@ -1742,6 +1749,40 @@ def _project_switch(project_id: str) -> int:
     print(f"✓ Project aktif: {target.name} ({target.project_id})")
     return 0
 
+
+
+
+
+def _help_cmd(topic: str | None = None) -> int:
+    """Tampilkan bantuan untuk command atau topik"""
+    docs_dir = Path.home() / ".expert-workstation" / "engine" / "docs"
+    
+    if topic is None:
+        print("\n=== Dokumentasi Expert Workstation ===\n")
+        topics = [
+            ("quickstart", "Cara mulai menggunakan XP"),
+            ("workflow", "Siklus kerja: spec → build → apply → lock"),
+            ("commands", "Daftar semua command yang tersedia"),
+            ("concepts", "Konsep inti: checkpoint, milestone, dll"),
+            ("project-setup", "Cara setup project baru"),
+            ("troubleshooting", "Solusi masalah umum"),
+            ("architecture", "Arsitektur internal XP"),
+        ]
+        for name, desc in topics:
+            print(f"  {name:20} - {desc}")
+        print("\nGunakan: xp help <topik>")
+        print("Contoh: xp help workflow\n")
+        return 0
+    
+    topic_file = docs_dir / f"{topic}.md"
+    if not topic_file.exists():
+        print(f"ERROR: Topik '{topic}' tidak ditemukan")
+        print(f"Topik yang tersedia: quickstart, workflow, commands, concepts, project-setup, troubleshooting, architecture")
+        return 1
+    
+    content = topic_file.read_text(encoding="utf-8")
+    print(content)
+    return 0
 
 
 def _upgrade_cmd() -> int:
