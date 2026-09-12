@@ -129,14 +129,17 @@
     {
       "created_at": "2026-09-12T14:55:49.232930+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "2adfff2c3d9e255743faf88a35cefc0326029ed9e1b70d3050b71389708934dc",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
           "supabase/migrations/20260912100000_cs05_shift_foundation.sql",
           "supabase/tests/010_cs05_shift.sql"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-05-P1-SHIFT-FOUNDATION-e8984cce",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-05-P1-SHIFT-FOUNDATION-e8984cce/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "37512205344ecf308407da19609340776d733191",
         "head": "ac0cb2448e2d54d139504b595c42fefaa866322d",
         "human_qa": {
           "notes": "QA manusia clear melalui menu XP",
@@ -144,21 +147,23 @@
           "timestamp": "2026-09-12T15:16:25.438165+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-P1-SHIFT-FOUNDATION-e8984cce/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "resolved_incident_id": "INC-B2C1ED6E",
         "safepoint_head": "37512205344ecf308407da19609340776d733191",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-05-P1-SHIFT-FOUNDATION-e8984cce/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "eb01d42f6027e8fca08c5d654da0ee8dfe855045ec0b68a6c0eec3ae75dea6ed"
       },
       "milestone": "CS-05-P1-SHIFT-FOUNDATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-05-P1-SHIFT-FOUNDATION-e8984cce",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-12T15:16:25.438799+00:00"
+      "updated_at": "2026-09-12T15:17:29.221707+00:00"
     }
   ]
 }
