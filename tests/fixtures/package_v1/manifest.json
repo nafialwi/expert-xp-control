@@ -1,0 +1,23 @@
+{
+  "protocol_version": 1,
+  "min_xp_version": "2.0.0-rc1",
+  "package_type": "WORK",
+  "project_id": "fixture-project",
+  "run_id": null,
+  "milestone": "M1",
+  "base_fingerprint": "fixture-fingerprint",
+  "expected_state": "IDLE",
+  "allowed_paths": [
+    "src/"
+  ],
+  "operations": [
+    {
+      "type": "DELETE_ALLOWED_FILE",
+      "path": "src/obsolete.txt"
+    }
+  ],
+  "checksums": {},
+  "human_qa": [
+    "Fixture QA remains explicit."
+  ]
+}

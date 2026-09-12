@@ -1,0 +1,37 @@
+{
+  "allowed_branch_prefixes": [
+    "work/",
+    "xp/recovery/"
+  ],
+  "protected_branches": [
+    "main",
+    "master"
+  ],
+  "source_verify": [
+    {
+      "adapter": "node",
+      "script": "verify"
+    }
+  ],
+  "database": {
+    "adapter": "postgresql",
+    "normal_migration_single_transaction": true,
+    "require_on_error_stop": true
+  },
+  "deployment": {
+    "production": "DISABLED",
+    "reason": "fixture"
+  },
+  "remote_safepoint": {
+    "enabled": true,
+    "remote": "origin"
+  },
+  "warnings": {
+    "detect": [
+      "INEFFECTIVE_DYNAMIC_IMPORT"
+    ],
+    "known": [
+      "INEFFECTIVE_DYNAMIC_IMPORT"
+    ]
+  }
+}

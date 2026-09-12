@@ -1,0 +1,16 @@
+{
+  "project_id": "fixture-project",
+  "name": "Fixture Project",
+  "profile_version": 1,
+  "runtimes": [
+    "node",
+    "python"
+  ],
+  "source_adapter": "git",
+  "database_adapter": "postgresql",
+  "verify_adapter": "npm-script",
+  "deployment_adapter": null,
+  "metadata": {
+    "blueprint_baseline": "fixture-v1"
+  }
+}
