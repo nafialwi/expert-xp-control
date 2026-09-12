@@ -33,6 +33,29 @@ class EngineLifecycleRedTests(unittest.TestCase):
         )
         return source
 
+    @staticmethod
+    def _healthy_candidate_source(root: Path, version: str) -> Path:
+        source = root / f"healthy-candidate-{version}"
+        package = source / "src" / "xp"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text(
+            f'__version__ = "{version}"\n',
+            encoding="utf-8",
+        )
+        (package / "cli.py").write_text(
+            "from . import __version__\n"
+            "import sys\n"
+            "def main():\n"
+            "    if sys.argv[1:] == ['version']:\n"
+            "        print(f'Expert Workstation XP {__version__}')\n"
+            "        return 0\n"
+            "    return 2\n"
+            "if __name__ == '__main__':\n"
+            "    raise SystemExit(main())\n",
+            encoding="utf-8",
+        )
+        return source
+
     def test_install_candidate_is_side_by_side_and_does_not_switch_active_version(self):
         EngineLifecycle = self._load_api()
 
@@ -136,13 +159,36 @@ class EngineLifecycleRedTests(unittest.TestCase):
                     health_check=exploding_health_check,
                 )
 
-            self.assertEqual(
-                lifecycle.active_version(),
-                "2.0.0-rc18.3",
-                "XP+-01 RED #4: active version must be restored even when health check raises",
-            )
+            self.assertEqual(lifecycle.active_version(), "2.0.0-rc18.3")
             self.assertEqual(lifecycle.previous_version(), "2.0.0-rc18.3")
             self.assertIsNone(lifecycle.candidate_version())
+
+    def test_builtin_candidate_check_validates_import_and_cli_without_activation(self):
+        EngineLifecycle = self._load_api()
+
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            root = home / ".expert-workstation"
+            root.mkdir(parents=True)
+            (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
+
+            lifecycle = EngineLifecycle(home)
+            candidate_source = self._healthy_candidate_source(home, "2.1.0-rc1")
+            lifecycle.install_candidate("2.1.0-rc1", candidate_source)
+
+            self.assertTrue(
+                hasattr(lifecycle, "check_candidate"),
+                "XP+-01 RED #5: built-in check_candidate() is not implemented yet",
+            )
+
+            report = lifecycle.check_candidate("2.1.0-rc1")
+
+            self.assertEqual(report.status, "CLEAR")
+            self.assertEqual(report.version, "2.1.0-rc1")
+            self.assertEqual(lifecycle.active_version(), "2.0.0-rc18.3")
+            self.assertEqual(lifecycle.candidate_version(), "2.1.0-rc1")
+            self.assertIn("import", report.checks)
+            self.assertIn("cli-version", report.checks)
 
 
 if __name__ == "__main__":
