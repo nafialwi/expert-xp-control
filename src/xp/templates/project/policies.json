@@ -1,0 +1,29 @@
+{
+  "allowed_branch_prefixes": [
+    "work/",
+    "xp/recovery/"
+  ],
+  "protected_branches": [
+    "main",
+    "master"
+  ],
+  "source_verify": [
+    {
+      "adapter": "node",
+      "script": "verify"
+    }
+  ],
+  "database": null,
+  "deployment": {
+    "production": "DISABLED",
+    "reason": "mechanism not externally verified"
+  },
+  "remote_safepoint": {
+    "enabled": true,
+    "remote": "origin"
+  },
+  "warnings": {
+    "detect": [],
+    "known": []
+  }
+}

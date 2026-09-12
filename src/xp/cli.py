@@ -1403,6 +1403,16 @@ def build_parser() -> argparse.ArgumentParser:
     takeover.add_argument("--run", required=True)
     takeover.add_argument("--yes", action="store_true")
     pkgbuild = sub.add_parser("pkg-build")
+    proj = sub.add_parser("project", help="Project management")
+    proj_sub = proj.add_subparsers(dest="action")
+    proj_init = proj_sub.add_parser("init", help="Buat project baru dari template")
+    proj_init.add_argument("name", help="Nama project")
+    proj_add = proj_sub.add_parser("add", help="Daftarkan repo existing")
+    proj_add.add_argument("path", help="Path ke repo")
+    proj_sub.add_parser("list", help="List semua project terdaftar")
+    proj_switch = proj_sub.add_parser("switch", help="Ganti project aktif")
+    proj_switch.add_argument("project_id", help="Project ID")
+
     bundle = sub.add_parser("bundle")
     bundle.add_argument("--repo", required=True)
     pkgbuild.add_argument("--repo", required=True)
@@ -1481,6 +1491,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result.status in {"CLEAR", "KNOWN", "WARNING"} else 2
     if args.command == "bundle":
         return _bundle_cmd(args.repo)
+    if args.command == "project":
+        if args.action == "init":
+            return _project_init(args.name)
+        elif args.action == "add":
+            return _project_add(args.path)
+        elif args.action == "list":
+            return _project_list()
+        elif args.action == "switch":
+            return _project_switch(args.project_id)
+        else:
+            print("ERROR: action tidak dikenali")
+            return 1
     if args.command == "pkg-build":
         return _pkg_build(args.repo, args.spec, args.out)
     if args.command == "lease-release":
@@ -1550,6 +1572,167 @@ def _bundle_cmd(repo_arg: str) -> int:
     out.write_text("\n".join(lines), encoding="utf-8")
     print(f"Bundle dibuat: {out}")
     print(f"Ukuran: {out.stat().st_size} bytes. Lampirkan file ini ke chat AI baru (jangan paste manual).")
+    return 0
+
+
+
+def _project_init(name: str) -> int:
+    from datetime import date
+    import shutil
+    try:
+        from .models import ProjectProfile
+    except ImportError:
+        from .project_registry import ProjectProfile
+    
+    projects_dir = Path.home() / "WORKSTATION" / "projects"
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    
+    project_path = projects_dir / name
+    if project_path.exists():
+        print(f"ERROR: Folder {project_path} sudah ada")
+        return 1
+    
+    print(f"=== Membuat project: {name} ===")
+    project_path.mkdir(parents=True)
+    
+    # Git init
+    import subprocess
+    subprocess.run(["git", "init"], cwd=project_path, check=True, capture_output=True)
+    print("✓ git init")
+    
+    # Copy templates
+    templates = Path(__file__).parent / "templates" / "project"
+    xp_dir = project_path / ".xp"
+    xp_dir.mkdir()
+    
+    project_id = name.replace(" ", "-").lower()
+    project_name = name.replace("-", " ").title()
+    today = date.today().isoformat()
+    
+    # project.json
+    pj = json.loads((templates / "project.json").read_text(encoding="utf-8"))
+    pj["project_id"] = project_id
+    pj["name"] = project_name
+    (xp_dir / "project.json").write_text(json.dumps(pj, indent=2), encoding="utf-8")
+    print("✓ .xp/project.json")
+    
+    # policies.json
+    shutil.copy(templates / "policies.json", xp_dir / "policies.json")
+    print("✓ .xp/policies.json")
+    
+    # compatibility.json
+    shutil.copy(templates / "compatibility.json", xp_dir / "compatibility.json")
+    print("✓ .xp/compatibility.json")
+    
+    # scripts/verify.mjs
+    scripts_dir = project_path / "scripts"
+    scripts_dir.mkdir()
+    shutil.copy(templates / "verify.mjs", scripts_dir / "verify.mjs")
+    print("✓ scripts/verify.mjs")
+    
+    # docs/blueprint/README.md
+    bp_dir = project_path / "docs" / "blueprint"
+    bp_dir.mkdir(parents=True)
+    bp_text = (templates / "blueprint.md").read_text(encoding="utf-8")
+    bp_text = bp_text.replace("{{PROJECT_NAME}}", project_name).replace("{{DATE}}", today)
+    (bp_dir / "README.md").write_text(bp_text, encoding="utf-8")
+    print("✓ docs/blueprint/README.md")
+    
+    # docs/checkpoints/ROADMAP_PROGRESS.md
+    cp_dir = project_path / "docs" / "checkpoints"
+    cp_dir.mkdir(parents=True)
+    rm_text = (templates / "roadmap.md").read_text(encoding="utf-8")
+    rm_text = rm_text.replace("{{PROJECT_NAME}}", project_name)
+    (cp_dir / "ROADMAP_PROGRESS.md").write_text(rm_text, encoding="utf-8")
+    print("✓ docs/checkpoints/ROADMAP_PROGRESS.md")
+    
+    # README.md
+    readme_text = (templates / "readme.md").read_text(encoding="utf-8")
+    readme_text = readme_text.replace("{{PROJECT_NAME}}", project_name)
+    (project_path / "README.md").write_text(readme_text, encoding="utf-8")
+    print("✓ README.md")
+    
+    # .gitignore
+    shutil.copy(templates / "gitignore", project_path / ".gitignore")
+    print("✓ .gitignore")
+    
+    # Initial commit
+    subprocess.run(["git", "add", "."], cwd=project_path, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "feat: initial project scaffold"], 
+                   cwd=project_path, check=True, capture_output=True)
+    print("✓ git commit")
+    
+    # Register project
+    registry = ProjectRegistry.for_home(_paths().home)
+    registry.register(load_project_profile(project_path), project_path)
+    print(f"✓ Project terdaftar di registry")
+    
+    print(f"\n=== Project {name} berhasil dibuat ===")
+    print(f"Path: {project_path}")
+    print(f"\nLangkah selanjutnya:")
+    print(f"  1. cd {project_path}")
+    print(f"  2. xp")
+    print(f"  3. Pilih [3] Pilih project lain → {project_name}")
+    print(f"  4. Mulai pekerjaan pertama Anda")
+    return 0
+
+
+def _project_add(path_str: str) -> int:
+    try:
+        from .models import ProjectProfile
+    except ImportError:
+        from .project_registry import ProjectProfile
+    project_path = Path(path_str).expanduser().resolve()
+    if not project_path.exists():
+        print(f"ERROR: Path {project_path} tidak ada")
+        return 1
+    
+    xp_dir = project_path / ".xp"
+    if not xp_dir.exists():
+        print(f"ERROR: Folder .xp tidak ditemukan di {project_path}")
+        print(f"Apakah ini project XP? Jika belum, jalankan: xp project init <name>")
+        return 1
+    
+    profile = load_project_profile(project_path)
+    registry = ProjectRegistry.for_home(_paths().home)
+    registry.register(profile, project_path)
+    print(f"✓ Project {profile.name} terdaftar di registry")
+    print(f"Path: {project_path}")
+    return 0
+
+
+def _project_list() -> int:
+    registry = ProjectRegistry.for_home(_paths().home)
+    projects = registry.list_projects()
+    if not projects:
+        print("Belum ada project terdaftar.")
+        print("\nBuat project baru: xp project init <name>")
+        return 0
+    
+    print(f"Project terdaftar ({len(projects)}):")
+    for p in projects:
+        print(f"  - {p.project_id} | {p.name} | {p.repo_path or '(remote-only)'}")
+    return 0
+
+
+def _project_switch(project_id: str) -> int:
+    registry = ProjectRegistry.for_home(_paths().home)
+    projects = registry.list_projects()
+    target = None
+    for p in projects:
+        if p.project_id == project_id:
+            target = p
+            break
+    
+    if not target:
+        print(f"ERROR: Project {project_id} tidak ditemukan")
+        print(f"\nProject terdaftar:")
+        for p in projects:
+            print(f"  - {p.project_id}")
+        return 1
+    
+    registry.activate(target.project_id)
+    print(f"✓ Project aktif: {target.name} ({target.project_id})")
     return 0
 
 if __name__ == "__main__":

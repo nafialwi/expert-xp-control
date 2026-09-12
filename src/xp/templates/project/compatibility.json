@@ -1,0 +1,12 @@
+{
+  "min_xp_version": "2.0.0-rc17",
+  "primary_platform": "Android + Termux",
+  "required_commands": [
+    "git",
+    "python",
+    "node",
+    "npm"
+  ],
+  "database_commands": [],
+  "supabase_cli_required": false
+}

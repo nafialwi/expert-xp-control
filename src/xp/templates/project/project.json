@@ -1,0 +1,16 @@
+{
+  "project_id": "{{PROJECT_ID}}",
+  "name": "{{PROJECT_NAME}}",
+  "profile_version": 1,
+  "source_adapter": "git",
+  "database_adapter": null,
+  "deployment_adapter": null,
+  "runtimes": [
+    "node"
+  ],
+  "metadata": {
+    "blueprint_baseline": "1.0",
+    "current_canonical_milestone": null,
+    "deployment_status": "UNVERIFIED_DISABLED"
+  }
+}
