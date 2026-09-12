@@ -1747,7 +1747,7 @@ def _project_switch(project_id: str) -> int:
 def _upgrade_cmd() -> int:
     import subprocess, shutil, re
     paths = _paths()
-    engine_path = paths.home / "engine"
+    engine_path = Path.home() / ".expert-workstation" / "engine"
     if not engine_path.exists():
         print("ERROR: engine tidak ditemukan")
         return 1
