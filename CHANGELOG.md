@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0 — 2026-09-13
+
+- Promotes the tested XP+ RC line to stable after XP+-09 universal, Legacy, Next, clean-install, upgrade, installed-candidate rollback, schema/handshake, and A-RB gates.
+- Product remains **XP+** with executable `xp`; `.xp/`, `XP_PKG_*`, registry identity, and profile/state/protocol v1 remain compatible.
+- The user's real active XP is not changed by XP+-09.
 ## 2.1.0-rc1 — 2026-09-13
 
 - Product display becomes **XP+** while the executable remains `xp`.

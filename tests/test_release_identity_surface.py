@@ -41,9 +41,9 @@ def _schema_block() -> dict:
     return json.loads(payload)
 
 
-class XP08RCIdentitySurfaceTests(unittest.TestCase):
-    def test_rc_brand_and_version_keep_cli_name_xp(self):
-        self.assertEqual(xp.__version__, "2.1.0-rc1")
+class XP09StableIdentitySurfaceTests(unittest.TestCase):
+    def test_stable_brand_and_version_keep_cli_name_xp(self):
+        self.assertEqual(xp.__version__, "2.1.0")
         self.assertEqual(getattr(xp, "PRODUCT_NAME", None), "XP+")
         self.assertEqual(getattr(xp, "CLI_NAME", None), "xp")
 
@@ -55,7 +55,7 @@ class XP08RCIdentitySurfaceTests(unittest.TestCase):
             header()
         rendered = out.getvalue()
         self.assertIn("XP+", rendered)
-        self.assertIn("2.1.0-rc1", rendered)
+        self.assertIn("2.1.0", rendered)
 
     def test_cli_version_reports_xp_plus(self):
         result = subprocess.run(
@@ -70,7 +70,7 @@ class XP08RCIdentitySurfaceTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("XP+", result.stdout)
-        self.assertIn("2.1.0-rc1", result.stdout)
+        self.assertIn("2.1.0", result.stdout)
 
     def test_state_profile_protocol_versions_remain_v1(self):
         self.assertEqual(STATE_VERSION, 1)
@@ -170,7 +170,7 @@ class XP08RCIdentitySurfaceTests(unittest.TestCase):
         self.assertNotIn("human_qa_checklist", rendered)
         self.assertNotIn('"operation_key": "op"', rendered)
 
-    def test_rc_docs_record_a_plus_and_generic_optional_contract(self):
+    def test_release_docs_record_a_plus_and_generic_optional_contract(self):
         readme = README.read_text(encoding="utf-8")
         changelog = CHANGELOG.read_text(encoding="utf-8")
 
