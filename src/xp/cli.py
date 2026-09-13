@@ -23,6 +23,8 @@ from .journal import Journal
 from .control import ControlStateManager
 from .config import XPConfig
 from .onboarding import ProjectOnboarder, OnboardingError
+from .project_doctor import ProjectDoctor
+from .onboarding import SmartProjectOnboarder
 from .state_store import StateStore
 from .handoff import HandoffBuilder, HandoffContext
 from .redaction import sanitize_mapping
@@ -1357,6 +1359,57 @@ def _lease_takeover(project_id: str, run_id: str, yes: bool) -> int:
     return 0
 
 
+def _resolve_project_target(target: str) -> Path:
+    candidate = Path(target).expanduser()
+    if candidate.exists():
+        return candidate.resolve()
+    for item in ProjectRegistry.for_home(_home()).list_projects():
+        if item.project_id == target:
+            if not item.repo_path:
+                raise RuntimeError(
+                    f"Project {target} is remote-only; recover source before audit."
+                )
+            return Path(item.repo_path).expanduser().resolve()
+    raise RuntimeError(f"Unknown project/path: {target}")
+
+
+def _project_audit_cmd(target: str) -> int:
+    try:
+        repo = _resolve_project_target(target)
+        audit = ProjectDoctor(_home()).inspect(repo)
+    except Exception as exc:
+        print(json.dumps({"status": "RECOVERY_REQUIRED", "error": str(exc)}, indent=2))
+        return 2
+    print(json.dumps(audit.to_dict(), indent=2, sort_keys=True))
+    return 0 if audit.status in {"UNPROFILED", "PROFILE_INCOMPLETE", "WORK_READY"} else 2
+
+
+def _project_smart_onboard_cmd(
+    target: str,
+    *,
+    approve: bool,
+    verify_script: str | None,
+) -> int:
+    try:
+        repo = _resolve_project_target(target) if not Path(target).expanduser().exists() else Path(target).expanduser().resolve()
+        onboarder = SmartProjectOnboarder(_home())
+        proposal = onboarder.propose(repo)
+        print(json.dumps(proposal.to_dict(), indent=2, sort_keys=True))
+        if not approve:
+            return 0
+        profile = onboarder.apply(
+            repo,
+            proposal,
+            approved=True,
+            verify_choice=verify_script,
+        )
+        print(json.dumps({"status": "APPLIED", "project_id": profile.project_id}, indent=2))
+        return 0
+    except Exception as exc:
+        print(json.dumps({"status": "BLOCKED", "error": str(exc)}, indent=2))
+        return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="xp", add_help=True)
     sub = parser.add_subparsers(dest="command")
@@ -1416,6 +1469,12 @@ def build_parser() -> argparse.ArgumentParser:
     proj_sub.add_parser("list", help="List semua project terdaftar")
     proj_switch = proj_sub.add_parser("switch", help="Ganti project aktif")
     proj_switch.add_argument("project_id", help="Project ID")
+    proj_audit = proj_sub.add_parser("audit", help="Audit project readiness")
+    proj_audit.add_argument("target", help="Repo path or registered project id")
+    proj_onboard = proj_sub.add_parser("onboard", help="Smart onboarding proposal")
+    proj_onboard.add_argument("target", help="Repo path or registered project id")
+    proj_onboard.add_argument("--approve", action="store_true")
+    proj_onboard.add_argument("--verify-script")
     sub.add_parser("upgrade", help="Upgrade XP")
     sub.add_parser("check", help="Cek dependency")
     sub.add_parser("sweep", help="Sweep folder Download untuk file XP")
@@ -1513,6 +1572,14 @@ def main(argv: list[str] | None = None) -> int:
             return _project_list()
         elif args.action == "switch":
             return _project_switch(args.project_id)
+        elif args.action == "audit":
+            return _project_audit_cmd(args.target)
+        elif args.action == "onboard":
+            return _project_smart_onboard_cmd(
+                args.target,
+                approve=args.approve,
+                verify_script=args.verify_script,
+            )
         else:
             print("ERROR: action tidak dikenali")
             return 1

@@ -159,3 +159,8 @@ def audit_workstation(home: Path, *, check_database_connection: bool = True) -> 
     else:
         overall = "READY"
     return ReadinessReport(overall, project_name, tuple(checks))
+
+def audit_project_readiness(repo: Path, *, home: Path | None = None):
+    """Additive XP+ project-level readiness API; legacy workstation audit is unchanged."""
+    from .project_doctor import ProjectDoctor
+    return ProjectDoctor(home).inspect(repo)

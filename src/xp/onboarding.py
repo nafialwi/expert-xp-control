@@ -142,3 +142,195 @@ class ProjectOnboarder:
                 import shutil
                 shutil.rmtree(xp_dir, ignore_errors=True)
             raise
+
+@dataclass(frozen=True)
+class SmartOnboardingProposal:
+    status: str
+    repo_path: str
+    project_id: str
+    project_name: str
+    runtimes: tuple[str, ...]
+    verify_candidates: tuple[str, ...]
+    recommended_verify: str | None
+    profile: dict
+    policies: dict
+    compatibility: dict
+    findings: tuple[str, ...]
+
+    def to_dict(self) -> dict:
+        return {
+            "status": self.status,
+            "repo_path": self.repo_path,
+            "project_id": self.project_id,
+            "project_name": self.project_name,
+            "runtimes": list(self.runtimes),
+            "verify_candidates": list(self.verify_candidates),
+            "recommended_verify": self.recommended_verify,
+            "profile": self.profile,
+            "policies": self.policies,
+            "compatibility": self.compatibility,
+            "findings": list(self.findings),
+        }
+
+
+class SmartProjectOnboarder:
+    def __init__(self, user_home: Path):
+        self.user_home = Path(user_home).expanduser().resolve()
+
+    @staticmethod
+    def _slug(value: str) -> str:
+        import re
+        return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "project"
+
+    def propose(self, repo: Path) -> SmartOnboardingProposal:
+        from .project_doctor import ProjectDoctor, discover_project_facts
+
+        repo = Path(repo).expanduser().resolve()
+        if not repo.is_dir():
+            raise OnboardingError("target repository does not exist")
+
+        if (repo / ".xp" / "project.json").is_file():
+            audit = ProjectDoctor(self.user_home).inspect(repo)
+            return SmartOnboardingProposal(
+                "ALREADY_PROFILED",
+                str(repo),
+                audit.project_id or self._slug(repo.name),
+                audit.project_name or repo.name,
+                audit.runtimes,
+                (),
+                None,
+                {},
+                {},
+                {},
+                ("Existing .xp profile detected; audit it instead.",),
+            )
+
+        if not (repo / ".git").exists():
+            raise OnboardingError("smart onboarding requires a Git repository")
+
+        facts = discover_project_facts(repo)
+        project_id = self._slug(repo.name)
+        candidates = facts.verify_candidates
+        recommended = candidates[0] if len(candidates) == 1 else None
+        findings: list[str] = []
+        status = "PROPOSAL_READY"
+
+        if not facts.runtimes:
+            status = "USER_CHOICE_REQUIRED"
+            findings.append("UNKNOWN_RUNTIME: choose runtime/toolchain explicitly.")
+        if len(candidates) > 1:
+            status = "USER_CHOICE_REQUIRED"
+            findings.append("Multiple verification scripts are plausible; choose one.")
+        elif not candidates:
+            status = "USER_CHOICE_REQUIRED"
+            findings.append("No canonical verification command can be inferred safely.")
+
+        verify_steps = (
+            [{"adapter": "node", "script": recommended}]
+            if recommended and "node" in facts.runtimes
+            else []
+        )
+
+        profile = {
+            "profile_version": 1,
+            "project_id": project_id,
+            "name": repo.name,
+            "runtimes": list(facts.runtimes),
+            "source_adapter": "git",
+            "database_adapter": "postgresql" if facts.postgres else None,
+            "verify_adapter": "npm-script" if verify_steps else None,
+            "deployment_adapter": None,
+            "metadata": {"onboarding": "xp-plus-smart-proposal"},
+        }
+        policies = {
+            "protected_branches": ["main", "master"],
+            "allowed_branch_prefixes": ["work/", "xp/recovery/"],
+            "source_verify": verify_steps,
+            "database": None,
+            "deployment": {
+                "production": "DISABLED",
+                "reason": "not inferred by smart onboarding",
+            },
+        }
+
+        required = ["git"]
+        if "node" in facts.runtimes:
+            required += ["node", "npm"]
+        if "python" in facts.runtimes:
+            required += ["python"]
+        compatibility = {
+            "required_commands": list(dict.fromkeys(required)),
+            "database_commands": ["psql"] if facts.postgres else [],
+        }
+
+        return SmartOnboardingProposal(
+            status,
+            str(repo),
+            project_id,
+            repo.name,
+            facts.runtimes,
+            candidates,
+            recommended,
+            profile,
+            policies,
+            compatibility,
+            tuple(findings),
+        )
+
+    def apply(
+        self,
+        repo: Path,
+        proposal: SmartOnboardingProposal,
+        *,
+        approved: bool,
+        verify_choice: str | None = None,
+    ) -> ProjectProfile:
+        repo = Path(repo).expanduser().resolve()
+        if not approved:
+            raise OnboardingError("explicit approval is required")
+        if proposal.status == "ALREADY_PROFILED":
+            raise OnboardingError("project is already profiled; audit it instead")
+
+        selected = verify_choice or proposal.recommended_verify
+        if proposal.status == "USER_CHOICE_REQUIRED":
+            if not selected or selected not in proposal.verify_candidates:
+                raise OnboardingError("explicit verify choice is required")
+
+        profile = dict(proposal.profile)
+        policies = json.loads(json.dumps(proposal.policies))
+        if selected:
+            if "node" not in proposal.runtimes:
+                raise OnboardingError("selected npm verify requires node runtime")
+            policies["source_verify"] = [{"adapter": "node", "script": selected}]
+            profile["verify_adapter"] = "npm-script"
+
+        if not profile.get("runtimes"):
+            raise OnboardingError("runtime remains unknown; XP must not invent it")
+        if not policies.get("source_verify"):
+            raise OnboardingError("canonical verification remains unresolved")
+
+        xp_dir = repo / ".xp"
+        if xp_dir.exists():
+            raise OnboardingError(".xp already exists; audit/update instead")
+
+        xp_dir.mkdir()
+        try:
+            for name, payload in {
+                "project.json": profile,
+                "policies.json": policies,
+                "compatibility.json": proposal.compatibility,
+            }.items():
+                target = xp_dir / name
+                tmp = target.with_name(target.name + f".xp-{os.getpid()}.tmp")
+                tmp.write_text(
+                    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                os.replace(tmp, target)
+            installed = load_project_profile(repo)
+            ProjectRegistry.for_home(self.user_home).register(installed, repo)
+            return installed
+        except Exception:
+            import shutil
+            shutil.rmtree(xp_dir, ignore_errors=True)
+            raise
