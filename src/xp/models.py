@@ -42,3 +42,21 @@ class RunState:
             updated_at=str(data.get("updated_at") or datetime.now(timezone.utc).isoformat()),
             metadata=dict(data.get("metadata") or {}),
         )
+
+
+def read_run_state_v1(path: "Path") -> RunState:
+    """Read state_version=1 without migration or rewrite."""
+    import json
+    from pathlib import Path
+
+    source = Path(path)
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid XP run state: {source}") from exc
+    state = RunState.from_dict(dict(data))
+    if state.state_version != 1:
+        raise IncompatibleStateVersion(
+            f"Unsupported XP state version {state.state_version}; expected 1"
+        )
+    return state

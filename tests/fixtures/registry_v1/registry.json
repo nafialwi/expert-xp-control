@@ -1,0 +1,14 @@
+{
+  "last_active": "fixture-next",
+  "projects": {
+    "fixture-next": {
+      "last_active_at": "2026-09-12T00:00:00+00:00",
+      "name": "Fixture Next",
+      "project_id": "fixture-next",
+      "remote_url": "https://example.invalid/fixture-next.git",
+      "repo_path": null,
+      "status": "REMOTE_ONLY"
+    }
+  },
+  "version": 1
+}

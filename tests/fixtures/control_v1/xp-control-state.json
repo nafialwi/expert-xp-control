@@ -1,0 +1,31 @@
+{
+  "control_version": 1,
+  "registry": {
+    "last_active": "fixture-next",
+    "projects": {
+      "fixture-next": {
+        "last_active_at": "2026-09-12T00:00:00+00:00",
+        "name": "Fixture Next",
+        "project_id": "fixture-next",
+        "remote_url": "https://example.invalid/fixture-next.git",
+        "repo_path": null,
+        "status": "REMOTE_ONLY"
+      }
+    },
+    "version": 1
+  },
+  "runs": [
+    {
+      "created_at": "2026-09-12T00:00:00+00:00",
+      "metadata": {
+        "branch": "work/fixture"
+      },
+      "milestone": "CS-05-P2-SHIFT-BACKEND-LOGIC",
+      "project_id": "fixture-next",
+      "run_id": "fixture-next-CS-05-P2-abc123",
+      "stage": "LOCKED_REMOTE",
+      "state_version": 1,
+      "updated_at": "2026-09-12T00:10:00+00:00"
+    }
+  ]
+}

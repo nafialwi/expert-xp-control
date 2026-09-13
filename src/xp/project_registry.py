@@ -187,3 +187,60 @@ class ProjectRegistry:
         if restored["last_active"] not in restored["projects"]:
             restored["last_active"] = None
         self._save(restored)
+
+
+def read_project_profile_v1(path_or_repo: Path) -> ProjectProfile:
+    """Read profile_version=1 from repo or project.json path."""
+    source = Path(path_or_repo)
+    if source.is_dir():
+        source = source / ".xp" / "project.json"
+    if not source.is_file():
+        raise ProjectProfileError(f"Missing project profile: {source}")
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ProjectProfileError(
+            f"Invalid project profile JSON: {source}"
+        ) from exc
+    return ProjectProfile.from_dict(dict(data))
+
+
+def parse_registry_v1(data: dict) -> dict:
+    """Validate registry version 1 without rewriting it."""
+    if int(data.get("version", 0)) != 1:
+        raise ProjectProfileError("Unsupported registry version")
+    projects = data.get("projects")
+    if not isinstance(projects, dict):
+        raise ProjectProfileError("Registry projects must be an object")
+
+    for key, item in projects.items():
+        if not isinstance(item, dict):
+            raise ProjectProfileError(
+                f"Registry project {key} must be an object"
+            )
+        if not str(item.get("project_id") or "") or not str(
+            item.get("name") or ""
+        ):
+            raise ProjectProfileError(
+                f"Registry project {key} has incomplete identity"
+            )
+
+    last_active = data.get("last_active")
+    if last_active is not None and str(last_active) not in projects:
+        raise ProjectProfileError(
+            "Registry last_active does not reference a project"
+        )
+    return dict(data)
+
+
+def read_registry_v1(path: Path) -> dict:
+    path = Path(path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ProjectProfileError(
+            f"Invalid registry JSON: {path}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise ProjectProfileError("Registry root must be an object")
+    return parse_registry_v1(data)

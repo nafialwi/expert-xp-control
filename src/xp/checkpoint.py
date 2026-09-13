@@ -120,3 +120,58 @@ class CheckpointBuilder:
             lines.append(f"{digest}  {path}")
         sha_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return CheckpointArtifacts(report=report, sha256s=sha_file, state=state, source_archive=source_archive)
+
+
+@dataclass(frozen=True)
+class CheckpointStateV1:
+    project_id: str
+    project_name: str
+    milestone: str
+    stage: str
+    run_id: str | None
+    commit: str | None
+    created_at: str | None
+    evidence: dict[str, Any]
+    source_hashes: dict[str, str]
+    source_archive: str | None
+
+
+def read_checkpoint_state_v1(path: Path) -> CheckpointStateV1:
+    """Read existing CHECKPOINT_STATE.json without migration."""
+    path = Path(path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid checkpoint state: {path}") from exc
+
+    required = ("project_id", "milestone", "stage")
+    missing = [k for k in required if not str(data.get(k) or "").strip()]
+    if missing:
+        raise ValueError(
+            "checkpoint state missing field(s): " + ", ".join(missing)
+        )
+
+    project_id = str(data["project_id"])
+    return CheckpointStateV1(
+        project_id=project_id,
+        project_name=str(data.get("project_name") or project_id),
+        milestone=str(data["milestone"]),
+        stage=str(data["stage"]),
+        run_id=str(data["run_id"]) if data.get("run_id") is not None else None,
+        commit=str(data["commit"]) if data.get("commit") is not None else None,
+        created_at=(
+            str(data["created_at"])
+            if data.get("created_at") is not None
+            else None
+        ),
+        evidence=dict(data.get("evidence") or {}),
+        source_hashes={
+            str(k): str(v)
+            for k, v in dict(data.get("source_hashes") or {}).items()
+        },
+        source_archive=(
+            str(data["source_archive"])
+            if data.get("source_archive") is not None
+            else None
+        ),
+    )

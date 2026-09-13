@@ -211,3 +211,60 @@ def stage_package(path: Path, staging_root: Path) -> StagedPackage:
         if actual != expected:
             raise PackageError(f"Checksum mismatch: {name}")
     return StagedPackage(staging_root, manifest)
+
+
+@dataclass(frozen=True)
+class PackageManifestV1Snapshot:
+    protocol_version: int
+    package_type: str
+    project_id: str
+    expected_state: str
+    allowed_paths: tuple[str, ...]
+    operations: tuple[dict[str, Any], ...]
+    checksums: dict[str, str]
+
+
+def read_package_manifest_v1(path: Path) -> PackageManifestV1Snapshot:
+    """Read protocol-v1 manifest from JSON or ZIP without staging."""
+    path = Path(path)
+    try:
+        if path.suffix.lower() == ".zip":
+            with zipfile.ZipFile(path, "r") as zf:
+                raw = zf.read("manifest.json")
+            data = json.loads(raw.decode("utf-8"))
+        else:
+            data = json.loads(path.read_text(encoding="utf-8"))
+    except (
+        OSError,
+        KeyError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        zipfile.BadZipFile,
+    ) as exc:
+        raise PackageError(f"invalid protocol-v1 manifest: {path}") from exc
+
+    if int(data.get("protocol_version", 0)) != PROTOCOL_VERSION:
+        raise PackageError("unsupported package protocol")
+
+    missing = [
+        key
+        for key in PACKAGE_MANIFEST_REQUIRED_FIELDS
+        if key not in data
+    ]
+    if missing:
+        raise PackageError(
+            "Missing manifest fields: " + ", ".join(missing)
+        )
+
+    return PackageManifestV1Snapshot(
+        protocol_version=PROTOCOL_VERSION,
+        package_type=str(data["package_type"]),
+        project_id=str(data["project_id"]),
+        expected_state=str(data["expected_state"]),
+        allowed_paths=tuple(str(v) for v in data["allowed_paths"]),
+        operations=tuple(dict(v) for v in data["operations"]),
+        checksums={
+            str(k): str(v)
+            for k, v in dict(data["checksums"]).items()
+        },
+    )
