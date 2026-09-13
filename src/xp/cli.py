@@ -24,6 +24,7 @@ from .control import ControlStateManager
 from .config import XPConfig
 from .onboarding import ProjectOnboarder, OnboardingError
 from .project_doctor import ProjectDoctor
+from .project_context import ProjectSessionResolver
 from .onboarding import SmartProjectOnboarder
 from .state_store import StateStore
 from .handoff import HandoffBuilder, HandoffContext
@@ -122,6 +123,11 @@ def _latest_run(paths: XPPaths, project_id: str | None = None, *, include_termin
     return max(states, key=lambda x: x[0])[1] if states else None
 
 
+def _session_project(cwd: Path | None = None):
+    selection = ProjectSessionResolver(_home()).resolve(cwd)
+    return selection.project
+
+
 def _status() -> int:
     registry = ProjectRegistry.for_home(_home())
     projects = registry.list_projects()
@@ -133,7 +139,7 @@ def _status() -> int:
         print("Belum ada project yang terdaftar.")
         print("Engine XP siap digunakan untuk menambah atau memulihkan project.")
         return 0
-    last = registry.last_active() or projects[0]
+    last = _session_project() or projects[0]
     run = _latest_run(_paths(), last.project_id)
     print(f"Project       : {last.name}")
     print(f"Ketersediaan  : {'Lokal' if last.repo_path else 'Remote only'}")
@@ -165,7 +171,7 @@ def _self_test() -> int:
         print(f"{symbol} {name:<20} {status}")
 
     registry = ProjectRegistry.for_home(_home())
-    project = registry.last_active()
+    project = _session_project()
     print()
     print("KONEKSI PROJECT")
     if not project:
@@ -219,7 +225,11 @@ def _render_readiness(report) -> None:
 
 
 def _audit() -> int:
-    report = audit_workstation(_home(), check_database_connection=True)
+    report = audit_workstation(
+        _home(),
+        check_database_connection=True,
+        project_override=_session_project(),
+    )
     _render_readiness(report)
     return 0
 
@@ -331,7 +341,11 @@ def _configure_database_session(project) -> int:
 
 def _readiness_center(project) -> int:
     while True:
-        report = audit_workstation(_home(), check_database_connection=True)
+        report = audit_workstation(
+            _home(),
+            check_database_connection=True,
+            project_override=project,
+        )
         _render_readiness(report)
         print()
         print("TINDAKAN KESIAPAN")
@@ -1017,7 +1031,7 @@ def _home_screen() -> int:
             wait_for_enter()
             continue
 
-        last = registry.last_active() or projects[0]
+        last = _session_project() or projects[0]
         run = _latest_run(_paths(), last.project_id)
         active = _latest_run(_paths(), last.project_id, include_terminal=False)
         _project_card(last, run)

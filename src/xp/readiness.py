@@ -31,7 +31,12 @@ def _add(checks: list[ReadinessCheck], code: str, level: str, title: str, detail
     checks.append(ReadinessCheck(code, level, title, detail))
 
 
-def audit_workstation(home: Path, *, check_database_connection: bool = True) -> ReadinessReport:
+def audit_workstation(
+    home: Path,
+    *,
+    check_database_connection: bool = True,
+    project_override=None,
+) -> ReadinessReport:
     home = Path(home).expanduser().resolve()
     checks: list[ReadinessCheck] = []
 
@@ -51,7 +56,7 @@ def audit_workstation(home: Path, *, check_database_connection: bool = True) -> 
     _add(checks, "STATE_STORAGE", "CLEAR" if writable else "BLOCKER", "Penyimpanan XP", "Siap" if writable else "Tidak dapat ditulis")
 
     registry = ProjectRegistry.for_home(home)
-    project = registry.last_active()
+    project = project_override or registry.last_active()
     if not project:
         overall = "NOT_READY" if any(c.level == "BLOCKER" for c in checks) else "READY_WITH_LIMITATIONS"
         _add(checks, "PROJECT", "WARNING", "Project aktif", "Belum ada project aktif")
