@@ -246,20 +246,29 @@
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "HUMAN_QA",
         "base_fingerprint": "28a4e66a6252f8cd0c5cfd4cf07f7932acbd204d56098d13363802aacf7c87ec",
         "branch": "work/cs02-cs03-closure",
+        "changed_paths": [
+          "docs/checkpoints/ROADMAP_PROGRESS.md"
+        ],
+        "control_sync": "CLEAR",
         "head": "673fb92c9e0db3aec2e6cb7f1dc1c3f639498ccc",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-ROADMAP-PROGRESS-UPDATE-POST-CLOSURE-1cee79d6/package.zip",
         "remote_lease": "ACTIVE",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "safepoint_head": "0dc9f6476e9a8134dc85b9bec175e5b59f4fd589",
+        "safepoint_pushed": true,
+        "warning_status": "KNOWN",
+        "working_fingerprint": "945359e07500926fe33a47388b129e694aa5d22f42a49937c3e6386a778b9c05"
       },
       "milestone": "ROADMAP-PROGRESS-UPDATE-POST-CLOSURE",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-ROADMAP-PROGRESS-UPDATE-POST-CLOSURE-1cee79d6",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "HUMAN_QA",
       "state_version": 1,
-      "updated_at": "2026-09-13T10:39:49.071160+00:00"
+      "updated_at": "2026-09-13T10:40:15.022966+00:00"
     }
   ]
 }
