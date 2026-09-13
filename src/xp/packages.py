@@ -10,18 +10,14 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from . import __version__
+from .schema import (
+    ENGINE_EXECUTABLE_OPERATIONS,
+    PACKAGE_MANIFEST_REQUIRED_FIELDS,
+    PROTOCOL_VERSION,
+    PROTOCOL_V1_OPERATION_TYPES,
+)
 
-ALLOWED_OPERATIONS = {
-    "APPLY_PATCH",
-    "ADD_FILE",
-    "REPLACE_FILE",
-    "DELETE_ALLOWED_FILE",
-    "REGISTER_MIGRATION",
-    "RUN_SOURCE_VERIFY",
-    "APPLY_DB_MIGRATION",
-    "RUN_SQL_TEST",
-    "GENERATE_CHECKPOINT",
-}
+ALLOWED_OPERATIONS = set(PROTOCOL_V1_OPERATION_TYPES)
 
 
 class PackageError(ValueError):
@@ -111,17 +107,7 @@ def inspect_package(path: Path) -> PackageManifest:
         data = json.loads(raw.decode("utf-8"))
     except Exception as exc:
         raise PackageError("Invalid package manifest JSON") from exc
-    required = [
-        "protocol_version",
-        "min_xp_version",
-        "package_type",
-        "project_id",
-        "base_fingerprint",
-        "expected_state",
-        "allowed_paths",
-        "operations",
-        "checksums",
-    ]
+    required = list(PACKAGE_MANIFEST_REQUIRED_FIELDS)
     missing = [key for key in required if key not in data]
     if missing:
         raise PackageError(f"Missing manifest fields: {', '.join(missing)}")
@@ -146,7 +132,7 @@ def inspect_package(path: Path) -> PackageManifest:
 
 def validate_package(manifest: PackageManifest, context: RunContext) -> ValidationReport:
     reasons: list[str] = []
-    if manifest.protocol_version != 1:
+    if manifest.protocol_version != PROTOCOL_VERSION:
         reasons.append("unsupported package protocol")
     if _version_tuple(__version__) < _version_tuple(manifest.min_xp_version):
         reasons.append("XP version is too old")
@@ -156,10 +142,7 @@ def validate_package(manifest: PackageManifest, context: RunContext) -> Validati
         reasons.append("base source mismatch")
     if manifest.expected_state != context.stage:
         reasons.append("workflow state mismatch")
-    engine_executable = {
-        "APPLY_PATCH", "ADD_FILE", "REPLACE_FILE", "DELETE_ALLOWED_FILE",
-        "APPLY_DB_MIGRATION", "RUN_SQL_TEST",
-    }
+    engine_executable = set(ENGINE_EXECUTABLE_OPERATIONS)
     for operation in manifest.operations:
         if operation.get("type") not in ALLOWED_OPERATIONS:
             reasons.append(f"unsupported operation {operation.get('type')}")

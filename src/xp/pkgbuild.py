@@ -12,9 +12,10 @@ from .packages import RunContext, inspect_package, validate_package
 from .paths import XPPaths
 from .project_registry import load_project_profile
 from .state_store import StateStore
+from .schema import SPEC_FILE_OPERATIONS, SPEC_SQL_OPERATIONS, validate_spec_dict
 
-_FILE_OPS = {"ADD_FILE", "REPLACE_FILE"}
-_SQL_OPS = {"APPLY_DB_MIGRATION", "RUN_SQL_TEST"}
+_FILE_OPS = set(SPEC_FILE_OPERATIONS)
+_SQL_OPS = set(SPEC_SQL_OPERATIONS)
 
 
 class SpecError(ValueError):
@@ -43,7 +44,15 @@ def _latest_run(paths: XPPaths, project_id: str):
 def build_package_from_spec(home: Path, repo: Path, spec_path: Path, out: Path | None = None) -> Path:
     repo = Path(repo).expanduser().resolve()
     spec = json.loads(Path(spec_path).read_text(encoding="utf-8"))
+    schema_errors = validate_spec_dict(spec)
+    if schema_errors:
+        raise SpecError("spec tidak valid: " + "; ".join(schema_errors))
     profile = load_project_profile(repo)
+    declared_project = str(spec.get("project_id", "")).strip()
+    if declared_project and declared_project != profile.project_id:
+        raise SpecError(
+            f"project_id mismatch: spec={declared_project}, profile={profile.project_id}"
+        )
     paths = XPPaths.from_home(home)
     run = _latest_run(paths, profile.project_id)
     stage = run.stage if run else "IDLE"

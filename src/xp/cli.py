@@ -31,6 +31,7 @@ from .readiness import audit_workstation
 from .workflow import PRIMARY_SEQUENCE
 from .github_recovery import GitHubCLI, GitHubControlRecovery, GitHubRecoveryError
 from .engine_lifecycle import EngineLifecycle
+from .schema import schema_catalog, schema_for
 
 
 def _list_locked_milestones(project_id: str) -> list[str]:
@@ -1362,6 +1363,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status")
     sub.add_parser("self-test")
     sub.add_parser("version")
+    schema = sub.add_parser("schema", help="Print canonical XP+ schema")
+    schema.add_argument("kind", nargs="?", choices=["work", "remediation", "project-profile"])
     sub.add_parser("audit")
     register = sub.add_parser("register")
     register.add_argument("repo")
@@ -1443,6 +1446,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "version":
         print(f"Expert Workstation XP {__version__}")
         return 0
+    if args.command == "schema":
+        return _schema_cmd(args.kind)
     if args.command == "audit":
         return _audit()
     if args.command == "register":
@@ -1848,6 +1853,12 @@ def _sweep_cmd() -> int:
     return 0
 
 
+
+
+def _schema_cmd(kind: str | None) -> int:
+    payload = schema_for(kind) if kind else schema_catalog()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
 
 
 def _handshake_cmd() -> int:
