@@ -41,3 +41,92 @@ Supported package-spec operations:
 5. Let XP build, validate, apply, verify, and checkpoint the package.
 
 The CLI schema output is the authority if any historical example disagrees with this document.
+
+## Canonical XP schema contract
+
+<!-- XP_SCHEMA_CONTRACT_BEGIN -->
+{
+  "project-profile": {
+    "allowed_fields": [
+      "profile_version",
+      "project_id",
+      "name",
+      "runtimes",
+      "source_adapter",
+      "database_adapter",
+      "verify_adapter",
+      "deployment_adapter",
+      "metadata"
+    ],
+    "profile_version": 1,
+    "required": [
+      "project_id",
+      "name"
+    ],
+    "schema_name": "project-profile",
+    "schema_version": "1.0"
+  },
+  "remediation": {
+    "allowed_fields": [
+      "spec_version",
+      "package_type",
+      "project_id",
+      "run_id",
+      "milestone",
+      "expected_state",
+      "allowed_paths",
+      "operations",
+      "human_qa"
+    ],
+    "human_qa_key": "human_qa",
+    "operation_key": "type",
+    "operation_types": [
+      "APPLY_PATCH",
+      "ADD_FILE",
+      "REPLACE_FILE",
+      "DELETE_ALLOWED_FILE",
+      "APPLY_DB_MIGRATION",
+      "RUN_SQL_TEST"
+    ],
+    "package_type": "REMEDIATION",
+    "protocol_version": 1,
+    "required": [
+      "allowed_paths",
+      "operations"
+    ],
+    "schema_name": "remediation",
+    "schema_version": "1.0"
+  },
+  "work": {
+    "allowed_fields": [
+      "spec_version",
+      "package_type",
+      "project_id",
+      "run_id",
+      "milestone",
+      "expected_state",
+      "allowed_paths",
+      "operations",
+      "human_qa"
+    ],
+    "human_qa_key": "human_qa",
+    "operation_key": "type",
+    "operation_types": [
+      "APPLY_PATCH",
+      "ADD_FILE",
+      "REPLACE_FILE",
+      "DELETE_ALLOWED_FILE",
+      "APPLY_DB_MIGRATION",
+      "RUN_SQL_TEST"
+    ],
+    "package_type": "WORK",
+    "protocol_version": 1,
+    "required": [
+      "allowed_paths",
+      "operations"
+    ],
+    "schema_name": "work",
+    "schema_version": "1.0"
+  }
+}
+<!-- XP_SCHEMA_CONTRACT_END -->

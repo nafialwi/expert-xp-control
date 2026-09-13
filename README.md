@@ -86,3 +86,33 @@ HEAD, tracked diff, non-ignored untracked content, plus an explicit `.xp/`
 integrity check. Git-ignored build/cache/runtime changes are informational only
 and each changed ignored path is validated through Git ignore rules. The harness
 adds no silent ignore exclusions.
+
+
+## XP+ 2.1.0-rc1 Release Candidate
+
+XP+ keeps the executable name `xp`, project metadata under `.xp/`, package
+prefix `XP_PKG_*`, and profile/state/protocol version 1 compatibility.
+
+### A+ two-zone read-only proof
+
+**Zone 1** protects the original Legacy/Next repositories with full-tree byte
+immutability, including `.git` and ignored artifacts; no project command runs
+inside the originals. **Zone 2** runs realistic verify/workflow activity on a
+physical temporary copy and protects the canonical XP source boundary: expected
+HEAD, tracked diff, non-ignored untracked content, and `.xp/` explicitly.
+Changed Git-ignored build/cache artifacts are informational and must resolve
+through committed Git ignore rules.
+
+The XP+-09 compatibility matrix must include separate **Zone 1 proof** and
+**Zone 2 proof** columns.
+
+### Generic Toolchain Adapter
+
+The Generic Toolchain Adapter is user-approved for XP+ 2.1.0 as an
+**optional-only** capability. Project Doctor / Smart Onboarding must never
+auto-select it without explicit user approval. Its regression suite locks the
+argv allow-list, `shell=False`, bounded timeout, declared purpose, repo-path
+scope, sensitive-environment withholding, output redaction, network/deploy
+blocking, and source-mutation guard. Built-in adapter signatures remain
+unchanged. Full handshake and compatibility-matrix documentation is finalized
+at XP+-09/XP+-10.

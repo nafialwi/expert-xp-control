@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 import os
 import shutil
 import subprocess
@@ -171,30 +173,71 @@ class EngineLifecycle:
             )
         return self._check_installed_path(version, self.paths.versions / version)
 
-    def activate_candidate(self, version: str) -> EngineLifecycleResult:
+    def _switch_active_version(self, version: str) -> EngineLifecycleResult:
         version = str(version).strip()
-        candidate = self.candidate_version()
-        if candidate != version:
-            raise ValueError(
-                f"candidate mismatch: expected {candidate or '-'}, got {version or '-'}"
-            )
-
+        candidate = version
         destination = self.paths.versions / version
-        if not (destination / "src" / "xp" / "__init__.py").is_file():
-            raise FileNotFoundError(f"engine candidate is incomplete: {version}")
-
+        if not (destination / 'src' / 'xp' / '__init__.py').is_file():
+            raise FileNotFoundError(f'engine candidate is incomplete: {version}')
         current = self.active_version()
         if current is None:
-            raise RuntimeError("active engine version is missing")
-
+            raise RuntimeError('active engine version is missing')
         self._write_atomic(self._previous_file, current)
         self._write_atomic(self._active_file, version)
         try:
             self._candidate_file.unlink()
         except FileNotFoundError:
             pass
+        return EngineLifecycleResult('ACTIVATED', version, destination)
 
-        return EngineLifecycleResult("ACTIVATED", version, destination)
+    def activate_candidate(self, version: str):
+        candidate = self.candidate_version()
+        if candidate != version:
+            raise ValueError(
+                f"candidate mismatch: expected {candidate or '-'}, got {version or '-'}"
+            )
+        return self._switch_active_version(version)
+
+
+    def _record_rollback(self, version: str, *, reason: str):
+        journal = self.paths.root / "engine-rollback-journal.jsonl"
+        event = {
+            "version": str(version),
+            "reason": str(reason or "manual rollback"),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        existing = journal.read_text(encoding="utf-8") if journal.is_file() else ""
+        tmp = journal.with_name(journal.name + f".{os.getpid()}.tmp")
+        with tmp.open("w", encoding="utf-8") as handle:
+            handle.write(existing)
+            if existing and not existing.endswith("\n"):
+                handle.write("\n")
+            handle.write(json.dumps(event, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, journal)
+        return event
+
+    def rollback_to_previous(self, *, reason: str = "manual rollback"):
+        previous = self.previous_version()
+        if not previous:
+            raise RuntimeError("previous engine version is not available")
+        target = self.paths.versions / previous
+        if not target.is_dir():
+            raise FileNotFoundError(
+                f"previous installed engine directory not found: {previous}"
+            )
+        departed = self.active_version()
+        if not departed:
+            raise RuntimeError("active engine version is not available")
+
+        result = self._switch_active_version(previous)
+
+        if self.candidate_version() is not None:
+            raise RuntimeError("candidate marker was not cleared after rollback")
+        self._record_rollback(departed, reason=reason)
+        return result
+
 
     def activate_with_health_check(self, version: str, *, health_check) -> EngineLifecycleResult:
         activated = self.activate_candidate(version)

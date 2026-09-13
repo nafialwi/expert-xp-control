@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import CLI_NAME, PRODUCT_NAME, __version__
 from .autopilot import AutopilotController
 from .adapters.postgresql import PostgreSQLAdapter
 from .adapters.git import GitAdapter
@@ -1518,7 +1518,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "self-test":
         return _self_test()
     if args.command == "version":
-        print(f"Expert Workstation XP {__version__}")
+        print(f"Expert Workstation {PRODUCT_NAME} {__version__}")
         return 0
     if args.command == "schema":
         return _schema_cmd(args.kind)

@@ -6,7 +6,7 @@ import threading
 from . import __version__
 
 PRODUCT_NAME = "EXPERT WORKSTATION"
-ENGINE_NAME = "XP"
+ENGINE_NAME = "XP+"
 BYLINE = "by Rahmawan"
 
 
@@ -19,7 +19,7 @@ def clear_screen() -> None:
 def header() -> None:
     print("╔══════════════════════════════════════╗")
     print("║          EXPERT WORKSTATION          ║")
-    print("║" + f"XP v{__version__}".center(38) + "║")
+    print("║" + f"{ENGINE_NAME} v{__version__}".center(38) + "║")
     print("╚══════════════════════════════════════╝")
     print("              by Rahmawan")
     print()
