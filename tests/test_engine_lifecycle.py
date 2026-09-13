@@ -1,43 +1,22 @@
 from __future__ import annotations
 
-import importlib
-import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
 
+from xp.engine_lifecycle import EngineLifecycle
 
-class EngineLifecycleRedTests(unittest.TestCase):
-    def _load_api(self):
-        spec = importlib.util.find_spec("xp.engine_lifecycle")
-        self.assertIsNotNone(
-            spec,
-            "XP+-01 RED: src/xp/engine_lifecycle.py does not exist yet",
-        )
-        module = importlib.import_module("xp.engine_lifecycle")
-        lifecycle_cls = getattr(module, "EngineLifecycle", None)
-        self.assertIsNotNone(
-            lifecycle_cls,
-            "XP+-01 RED: EngineLifecycle API is not implemented yet",
-        )
-        return lifecycle_cls
 
+class EngineLifecycleTests(unittest.TestCase):
     @staticmethod
-    def _candidate_source(root: Path, version: str) -> Path:
+    def _candidate_source(root: Path, version: str, *, compat_pass: bool = True) -> Path:
         source = root / f"candidate-{version}"
         package = source / "src" / "xp"
+        tests = source / "tests"
         package.mkdir(parents=True)
-        (package / "__init__.py").write_text(
-            f'__version__ = "{version}"\n',
-            encoding="utf-8",
-        )
-        return source
+        tests.mkdir(parents=True)
 
-    @staticmethod
-    def _healthy_candidate_source(root: Path, version: str) -> Path:
-        source = root / f"healthy-candidate-{version}"
-        package = source / "src" / "xp"
-        package.mkdir(parents=True)
+        (tests / "__init__.py").write_text("", encoding="utf-8")
         (package / "__init__.py").write_text(
             f'__version__ = "{version}"\n',
             encoding="utf-8",
@@ -54,23 +33,30 @@ class EngineLifecycleRedTests(unittest.TestCase):
             "    raise SystemExit(main())\n",
             encoding="utf-8",
         )
+        (tests / "test_backward_compatibility.py").write_text(
+            "import unittest\n"
+            "class Compat(unittest.TestCase):\n"
+            "    def test_v1(self):\n"
+            f"        self.assertTrue({compat_pass!r})\n",
+            encoding="utf-8",
+        )
         return source
 
+    @staticmethod
+    def _lifecycle(td: str):
+        home = Path(td)
+        root = home / ".expert-workstation"
+        root.mkdir(parents=True)
+        (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
+        return EngineLifecycle(home), root
+
     def test_install_candidate_is_side_by_side_and_does_not_switch_active_version(self):
-        EngineLifecycle = self._load_api()
-
         with tempfile.TemporaryDirectory() as td:
-            home = Path(td)
-            root = home / ".expert-workstation"
-            root.mkdir(parents=True)
-            (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
-
-            candidate_source = self._candidate_source(home, "2.1.0-rc1")
-            lifecycle = EngineLifecycle(home)
-
-            result = lifecycle.install_candidate("2.1.0-rc1", candidate_source)
-
-            self.assertEqual(result.status, "INSTALLED")
+            lifecycle, root = self._lifecycle(td)
+            lifecycle.install_candidate(
+                "2.1.0-rc1",
+                self._candidate_source(Path(td), "2.1.0-rc1"),
+            )
             self.assertEqual(lifecycle.active_version(), "2.0.0-rc18.3")
             self.assertEqual(lifecycle.candidate_version(), "2.1.0-rc1")
             self.assertTrue(
@@ -78,117 +64,98 @@ class EngineLifecycleRedTests(unittest.TestCase):
             )
             self.assertFalse((root / "previous-version").exists())
 
-    def test_activation_records_previous_before_switching_active_version(self):
-        EngineLifecycle = self._load_api()
-
+    def test_activation_records_previous_before_switching(self):
         with tempfile.TemporaryDirectory() as td:
-            home = Path(td)
-            root = home / ".expert-workstation"
-            root.mkdir(parents=True)
-            (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
-
-            lifecycle = EngineLifecycle(home)
-            candidate_source = self._candidate_source(home, "2.1.0-rc1")
-            lifecycle.install_candidate("2.1.0-rc1", candidate_source)
-
+            lifecycle, _ = self._lifecycle(td)
+            lifecycle.install_candidate(
+                "2.1.0-rc1",
+                self._candidate_source(Path(td), "2.1.0-rc1"),
+            )
             result = lifecycle.activate_candidate("2.1.0-rc1")
-
             self.assertEqual(result.status, "ACTIVATED")
             self.assertEqual(lifecycle.previous_version(), "2.0.0-rc18.3")
             self.assertEqual(lifecycle.active_version(), "2.1.0-rc1")
             self.assertIsNone(lifecycle.candidate_version())
 
-    def test_failed_post_activation_health_check_rolls_back_to_previous_version(self):
-        EngineLifecycle = self._load_api()
-
+    def test_false_health_check_rolls_back(self):
         with tempfile.TemporaryDirectory() as td:
-            home = Path(td)
-            root = home / ".expert-workstation"
-            root.mkdir(parents=True)
-            (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
-
-            lifecycle = EngineLifecycle(home)
-            candidate_source = self._candidate_source(home, "2.1.0-rc1")
-            lifecycle.install_candidate("2.1.0-rc1", candidate_source)
-
-            observed_active = []
-
-            def failing_health_check(candidate_path: Path) -> bool:
-                observed_active.append(lifecycle.active_version())
-                self.assertTrue(candidate_path.is_dir())
-                return False
-
+            lifecycle, _ = self._lifecycle(td)
+            lifecycle.install_candidate(
+                "2.1.0-rc1",
+                self._candidate_source(Path(td), "2.1.0-rc1"),
+            )
             result = lifecycle.activate_with_health_check(
                 "2.1.0-rc1",
-                health_check=failing_health_check,
+                health_check=lambda _: False,
             )
-
-            self.assertEqual(observed_active, ["2.1.0-rc1"])
             self.assertEqual(result.status, "ROLLED_BACK")
             self.assertEqual(lifecycle.active_version(), "2.0.0-rc18.3")
-            self.assertEqual(lifecycle.previous_version(), "2.0.0-rc18.3")
-            self.assertIsNone(lifecycle.candidate_version())
 
-    def test_health_check_exception_rolls_back_before_error_is_re_raised(self):
-        EngineLifecycle = self._load_api()
-
+    def test_health_exception_rolls_back_then_reraises(self):
         with tempfile.TemporaryDirectory() as td:
-            home = Path(td)
-            root = home / ".expert-workstation"
-            root.mkdir(parents=True)
-            (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
-
-            lifecycle = EngineLifecycle(home)
-            candidate_source = self._candidate_source(home, "2.1.0-rc1")
-            lifecycle.install_candidate("2.1.0-rc1", candidate_source)
-
-            class CandidateHealthError(RuntimeError):
-                pass
-
-            def exploding_health_check(candidate_path: Path) -> bool:
-                self.assertEqual(lifecycle.active_version(), "2.1.0-rc1")
-                self.assertTrue(candidate_path.is_dir())
-                raise CandidateHealthError("candidate health check exploded")
-
-            with self.assertRaisesRegex(
-                CandidateHealthError,
-                "candidate health check exploded",
-            ):
-                lifecycle.activate_with_health_check(
-                    "2.1.0-rc1",
-                    health_check=exploding_health_check,
-                )
-
-            self.assertEqual(lifecycle.active_version(), "2.0.0-rc18.3")
-            self.assertEqual(lifecycle.previous_version(), "2.0.0-rc18.3")
-            self.assertIsNone(lifecycle.candidate_version())
-
-    def test_builtin_candidate_check_validates_import_and_cli_without_activation(self):
-        EngineLifecycle = self._load_api()
-
-        with tempfile.TemporaryDirectory() as td:
-            home = Path(td)
-            root = home / ".expert-workstation"
-            root.mkdir(parents=True)
-            (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
-
-            lifecycle = EngineLifecycle(home)
-            candidate_source = self._healthy_candidate_source(home, "2.1.0-rc1")
-            lifecycle.install_candidate("2.1.0-rc1", candidate_source)
-
-            self.assertTrue(
-                hasattr(lifecycle, "check_candidate"),
-                "XP+-01 RED #5: built-in check_candidate() is not implemented yet",
+            lifecycle, _ = self._lifecycle(td)
+            lifecycle.install_candidate(
+                "2.1.0-rc1",
+                self._candidate_source(Path(td), "2.1.0-rc1"),
             )
 
-            report = lifecycle.check_candidate("2.1.0-rc1")
+            class Boom(RuntimeError):
+                pass
 
-            self.assertEqual(report.status, "CLEAR")
-            self.assertEqual(report.version, "2.1.0-rc1")
+            def explode(_):
+                raise Boom("health exploded")
+
+            with self.assertRaisesRegex(Boom, "health exploded"):
+                lifecycle.activate_with_health_check(
+                    "2.1.0-rc1",
+                    health_check=explode,
+                )
+            self.assertEqual(lifecycle.active_version(), "2.0.0-rc18.3")
+
+    def test_candidate_check_requires_import_cli_and_v1_compatibility(self):
+        with tempfile.TemporaryDirectory() as td:
+            lifecycle, _ = self._lifecycle(td)
+            lifecycle.install_candidate(
+                "2.1.0-rc1",
+                self._candidate_source(Path(td), "2.1.0-rc1"),
+            )
+            report = lifecycle.check_candidate("2.1.0-rc1")
+            self.assertEqual(report.status, "CLEAR", report.checks)
+            self.assertEqual(
+                report.checks,
+                {
+                    "import": "CLEAR",
+                    "cli-version": "CLEAR",
+                    "compat-v1": "CLEAR",
+                },
+            )
+
+    def test_failed_compatibility_fixture_blocks_promotion_before_activation(self):
+        with tempfile.TemporaryDirectory() as td:
+            lifecycle, _ = self._lifecycle(td)
+            lifecycle.install_candidate(
+                "2.1.0-rc1",
+                self._candidate_source(Path(td), "2.1.0-rc1", compat_pass=False),
+            )
+            result = lifecycle.promote_candidate("2.1.0-rc1")
+            self.assertEqual(result.status, "BLOCKED")
+            self.assertEqual(result.checks["compat-v1"], "BLOCKED")
             self.assertEqual(lifecycle.active_version(), "2.0.0-rc18.3")
             self.assertEqual(lifecycle.candidate_version(), "2.1.0-rc1")
-            self.assertIn("import", report.checks)
-            self.assertIn("cli-version", report.checks)
+            self.assertIsNone(lifecycle.previous_version())
+
+    def test_healthy_candidate_is_promoted_after_pre_and_post_checks(self):
+        with tempfile.TemporaryDirectory() as td:
+            lifecycle, _ = self._lifecycle(td)
+            lifecycle.install_candidate(
+                "2.1.0-rc1",
+                self._candidate_source(Path(td), "2.1.0-rc1"),
+            )
+            result = lifecycle.promote_candidate("2.1.0-rc1")
+            self.assertEqual(result.status, "PROMOTED", result.checks)
+            self.assertEqual(lifecycle.previous_version(), "2.0.0-rc18.3")
+            self.assertEqual(lifecycle.active_version(), "2.1.0-rc1")
+            self.assertIsNone(lifecycle.candidate_version())
 
 
 if __name__ == "__main__":

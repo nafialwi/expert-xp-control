@@ -30,6 +30,7 @@ from .ui import clear_screen, header, wait_for_enter, human_path
 from .readiness import audit_workstation
 from .workflow import PRIMARY_SEQUENCE
 from .github_recovery import GitHubCLI, GitHubControlRecovery, GitHubRecoveryError
+from .engine_lifecycle import EngineLifecycle
 
 
 def _list_locked_milestones(project_id: str) -> list[str]:
@@ -1860,34 +1861,127 @@ def _handshake_cmd() -> int:
 
 
 def _upgrade_cmd() -> int:
-    import subprocess, shutil, re
+    import ast
+    import tempfile
+    import zipfile
+
     paths = _paths()
-    engine_path = Path.home() / ".expert-workstation" / "engine"
-    if not engine_path.exists():
+    engine_path = paths.root / "engine"
+    branch = os.environ.get("XP_ENGINE_BRANCH", "xp-engine").strip() or "xp-engine"
+
+    if not engine_path.is_dir():
         print("ERROR: engine tidak ditemukan")
         return 1
-    print("=== Upgrade XP ===")
-    subprocess.run(["git", "fetch", "origin", "xp-engine"], cwd=engine_path)
-    subprocess.run(["git", "checkout", "xp-engine"], cwd=engine_path)
-    subprocess.run(["git", "pull", "origin", "xp-engine"], cwd=engine_path)
-    init_text = (engine_path / "src" / "xp" / "__init__.py").read_text(encoding="utf-8")
-    match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', init_text)
-    if not match:
-        print("ERROR: parse version gagal")
+
+    print("=== Upgrade XP / XP+ ===")
+    fetched = subprocess.run(
+        ["git", "fetch", "origin", branch],
+        cwd=engine_path,
+        text=True,
+        capture_output=True,
+    )
+    if fetched.returncode != 0:
+        print("ERROR: git fetch gagal")
+        print((fetched.stderr or fetched.stdout).strip())
         return 1
-    new_version = match.group(1)
-    print(f"Versi baru: {new_version}")
-    new_dir = paths.home / "versions" / new_version
-    if new_dir.exists():
-        shutil.rmtree(new_dir)
-    new_dir.mkdir(parents=True)
-    (new_dir / "src").mkdir()
-    shutil.copytree(engine_path / "src" / "xp", new_dir / "src" / "xp")
-    (paths.home / "active-version").write_text(new_version, encoding="utf-8")
-    print(f"Upgrade ke {new_version} selesai")
-    return 0
 
+    ref = f"origin/{branch}"
+    with tempfile.TemporaryDirectory(prefix="xp-upgrade-") as td:
+        temp_root = Path(td)
+        archive = temp_root / "candidate.zip"
+        candidate_root = temp_root / "candidate"
+        candidate_root.mkdir()
 
+        archived = subprocess.run(
+            ["git", "archive", "--format=zip", "--output", str(archive), ref],
+            cwd=engine_path,
+            text=True,
+            capture_output=True,
+        )
+        if archived.returncode != 0:
+            print("ERROR: git archive candidate gagal")
+            print((archived.stderr or archived.stdout).strip())
+            return 1
+
+        with zipfile.ZipFile(archive, "r") as zf:
+            for name in zf.namelist():
+                member = Path(name)
+                if member.is_absolute() or ".." in member.parts:
+                    print(f"ERROR: archive member tidak aman: {name}")
+                    return 1
+            zf.extractall(candidate_root)
+
+        init_file = candidate_root / "src" / "xp" / "__init__.py"
+        if not init_file.is_file():
+            print("ERROR: candidate tidak memiliki src/xp/__init__.py")
+            return 1
+
+        try:
+            tree = ast.parse(init_file.read_text(encoding="utf-8"))
+            new_version = None
+            for node in tree.body:
+                if not isinstance(node, ast.Assign):
+                    continue
+                if len(node.targets) != 1:
+                    continue
+                target = node.targets[0]
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id == "__version__"
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)
+                ):
+                    new_version = node.value.value.strip()
+                    break
+        except (SyntaxError, OSError) as exc:
+            print(f"ERROR: parse version candidate gagal: {exc}")
+            return 1
+
+        if not new_version:
+            print("ERROR: __version__ candidate tidak ditemukan")
+            return 1
+
+        lifecycle = EngineLifecycle(_home())
+        current = lifecycle.active_version()
+        print(f"Aktif saat ini : {current or '-'}")
+        print(f"Candidate       : {new_version}")
+
+        if current == new_version:
+            print("XP sudah menggunakan versi terbaru")
+            return 0
+
+        destination = lifecycle.paths.versions / new_version
+        if destination.exists():
+            print(f"ERROR: directory versi sudah ada dan perlu audit manual: {destination}")
+            return 1
+
+        try:
+            lifecycle.install_candidate(new_version, candidate_root)
+            pre = lifecycle.check_candidate(new_version)
+        except Exception as exc:
+            print(f"ERROR: candidate staging/validation gagal: {exc}")
+            return 1
+
+        for name, status in sorted(pre.checks.items()):
+            print(f"{status:7} {name}")
+
+        if pre.status != "CLEAR":
+            print("UPGRADE BLOCKED: candidate gagal pre-activation checks")
+            return 1
+
+        try:
+            promotion = lifecycle.promote_candidate(new_version)
+        except Exception as exc:
+            print(f"ERROR: activation gagal; rollback safety dijalankan: {exc}")
+            return 1
+
+        if promotion.status != "PROMOTED":
+            print(f"UPGRADE {promotion.status}")
+            return 1
+
+        print(f"Upgrade ke {new_version} selesai dan tervalidasi")
+        print(f"Rollback origin: {promotion.previous_version or '-'}")
+        return 0
 def _check_cmd() -> int:
     import subprocess, shutil
     print("=== Dependency Check ===")

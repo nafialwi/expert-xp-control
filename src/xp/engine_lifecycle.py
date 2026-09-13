@@ -24,8 +24,16 @@ class CandidateHealthReport:
     checks: dict[str, str]
 
 
+@dataclass(frozen=True)
+class CandidatePromotionReport:
+    status: str
+    version: str
+    previous_version: str | None
+    checks: dict[str, str]
+
+
 class EngineLifecycle:
-    """Manage XP engine candidates and activation metadata safely."""
+    """Install, validate, activate, and roll back XP engine candidates safely."""
 
     def __init__(self, home: Path):
         self.home = Path(home).expanduser().resolve()
@@ -74,12 +82,85 @@ class EngineLifecycle:
 
         shutil.copytree(source, destination)
         self._write_atomic(self._candidate_file, version)
+        return EngineLifecycleResult("INSTALLED", version, destination)
 
-        return EngineLifecycleResult(
-            status="INSTALLED",
-            version=version,
-            path=destination,
+    @staticmethod
+    def _safe_env(src_dir: Path, home: Path) -> dict[str, str]:
+        env = os.environ.copy()
+        existing = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = str(src_dir) + (os.pathsep + existing if existing else "")
+        env["XP_USER_HOME"] = str(home)
+        return env
+
+    def _check_installed_path(self, version: str, destination: Path) -> CandidateHealthReport:
+        src_dir = destination / "src"
+        if not (src_dir / "xp" / "__init__.py").is_file():
+            return CandidateHealthReport("BLOCKED", version, {"install-shape": "BLOCKED"})
+
+        env = self._safe_env(src_dir, self.home)
+        checks: dict[str, str] = {}
+
+        try:
+            imported = subprocess.run(
+                [sys.executable, "-c", "import xp; print(xp.__version__)"],
+                cwd=destination,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            imported = None
+        checks["import"] = (
+            "CLEAR"
+            if imported is not None
+            and imported.returncode == 0
+            and imported.stdout.strip() == version
+            else "BLOCKED"
         )
+
+        try:
+            cli = subprocess.run(
+                [sys.executable, "-m", "xp.cli", "version"],
+                cwd=destination,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            cli = None
+        checks["cli-version"] = (
+            "CLEAR"
+            if cli is not None
+            and cli.returncode == 0
+            and version in cli.stdout
+            else "BLOCKED"
+        )
+
+        compat_test = destination / "tests" / "test_backward_compatibility.py"
+        if compat_test.is_file():
+            try:
+                compat = subprocess.run(
+                    [sys.executable, "-m", "unittest", "tests.test_backward_compatibility", "-v"],
+                    cwd=destination,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    timeout=60,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                compat = None
+            checks["compat-v1"] = (
+                "CLEAR"
+                if compat is not None and compat.returncode == 0
+                else "BLOCKED"
+            )
+        else:
+            checks["compat-v1"] = "BLOCKED"
+
+        status = "CLEAR" if all(value == "CLEAR" for value in checks.values()) else "BLOCKED"
+        return CandidateHealthReport(status, version, checks)
 
     def check_candidate(self, version: str) -> CandidateHealthReport:
         version = str(version).strip()
@@ -88,57 +169,7 @@ class EngineLifecycle:
             raise ValueError(
                 f"candidate mismatch: expected {candidate or '-'}, got {version or '-'}"
             )
-
-        destination = self.paths.versions / version
-        src_dir = destination / "src"
-        if not (src_dir / "xp" / "__init__.py").is_file():
-            raise FileNotFoundError(f"engine candidate is incomplete: {version}")
-
-        env = os.environ.copy()
-        env["PYTHONPATH"] = str(src_dir)
-
-        checks: dict[str, str] = {}
-
-        import_result = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                "import xp; print(xp.__version__)",
-            ],
-            cwd=destination,
-            env=env,
-            text=True,
-            capture_output=True,
-        )
-        imported_version = import_result.stdout.strip()
-        if import_result.returncode == 0 and imported_version == version:
-            checks["import"] = "CLEAR"
-        else:
-            checks["import"] = "BLOCKED"
-
-        cli_result = subprocess.run(
-            [sys.executable, "-m", "xp.cli", "version"],
-            cwd=destination,
-            env=env,
-            text=True,
-            capture_output=True,
-        )
-        cli_output = cli_result.stdout.strip()
-        if cli_result.returncode == 0 and version in cli_output:
-            checks["cli-version"] = "CLEAR"
-        else:
-            checks["cli-version"] = "BLOCKED"
-
-        status = (
-            "CLEAR"
-            if all(value == "CLEAR" for value in checks.values())
-            else "BLOCKED"
-        )
-        return CandidateHealthReport(
-            status=status,
-            version=version,
-            checks=checks,
-        )
+        return self._check_installed_path(version, self.paths.versions / version)
 
     def activate_candidate(self, version: str) -> EngineLifecycleResult:
         version = str(version).strip()
@@ -158,24 +189,14 @@ class EngineLifecycle:
 
         self._write_atomic(self._previous_file, current)
         self._write_atomic(self._active_file, version)
-
         try:
             self._candidate_file.unlink()
         except FileNotFoundError:
             pass
 
-        return EngineLifecycleResult(
-            status="ACTIVATED",
-            version=version,
-            path=destination,
-        )
+        return EngineLifecycleResult("ACTIVATED", version, destination)
 
-    def activate_with_health_check(
-        self,
-        version: str,
-        *,
-        health_check,
-    ) -> EngineLifecycleResult:
+    def activate_with_health_check(self, version: str, *, health_check) -> EngineLifecycleResult:
         activated = self.activate_candidate(version)
         previous = self.previous_version()
         if previous is None:
@@ -192,7 +213,28 @@ class EngineLifecycle:
 
         self._write_atomic(self._active_file, previous)
         return EngineLifecycleResult(
-            status="ROLLED_BACK",
-            version=previous,
-            path=self.paths.versions / previous,
+            "ROLLED_BACK",
+            previous,
+            self.paths.versions / previous,
         )
+
+    def promote_candidate(self, version: str) -> CandidatePromotionReport:
+        version = str(version).strip()
+        previous = self.active_version()
+
+        pre = self.check_candidate(version)
+        if pre.status != "CLEAR":
+            return CandidatePromotionReport("BLOCKED", version, previous, pre.checks)
+
+        post_checks: dict[str, str] = {}
+
+        def post_health(path: Path) -> bool:
+            report = self._check_installed_path(version, path)
+            post_checks.update(report.checks)
+            return report.status == "CLEAR"
+
+        result = self.activate_with_health_check(version, health_check=post_health)
+        if result.status == "ROLLED_BACK":
+            return CandidatePromotionReport("ROLLED_BACK", version, previous, post_checks)
+
+        return CandidatePromotionReport("PROMOTED", version, previous, post_checks)
