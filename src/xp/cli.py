@@ -1499,6 +1499,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     bundle = sub.add_parser("bundle")
     bundle.add_argument("--repo", required=True)
+    bundle.add_argument("--deep", action="store_true")
     pkgbuild.add_argument("--repo", required=True)
     pkgbuild.add_argument("--spec", required=True)
     pkgbuild.add_argument("--out")
@@ -1576,7 +1577,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"HANDOFF GPT: {result.handoff}")
         return 0 if result.status in {"CLEAR", "KNOWN", "WARNING"} else 2
     if args.command == "bundle":
-        return _bundle_cmd(args.repo)
+        return _bundle_cmd(args.repo, deep=args.deep)
     if args.command == "project":
         if args.action == "init":
             return _project_init(args.name)
@@ -1618,71 +1619,25 @@ def main(argv: list[str] | None = None) -> int:
 
 
 
-def _bundle_cmd(repo_arg: str) -> int:
-    import time
-    import dataclasses
-    from . import __version__
-    repo = Path(repo_arg).expanduser().resolve()
-    if not (repo / ".xp" / "project.json").exists():
-        print(f"ERROR: {repo} bukan project XP (tidak ada .xp/project.json)")
+def _bundle_cmd(repo_arg: str, *, deep: bool = False) -> int:
+    from .bundle import BundleBuilder
+
+    try:
+        artifact = BundleBuilder(_home()).build(
+            Path(repo_arg),
+            deep=deep,
+        )
+    except Exception as exc:
+        print(f"ERROR: bundle gagal: {exc}")
         return 1
-    profile = load_project_profile(repo)
-    paths = _paths()
-    cfg = XPConfig.for_home(paths.home)
-    lines: list[str] = []
-    lines.append("# XP CONTEXT BUNDLE — BACA DULU SEBELUM MENJAWAB")
-    lines.append(f"XP version: {__version__}")
-    lines.append(f"Generated: {time.strftime('%Y-%m-%dT%H:%M:%S')}")
-    lines.append(f"Device ID: {cfg.device_id}")
-    lines.append("")
-    lines.append("INSTRUKSI UNTUK AI PENERIMA:")
-    lines.append("Anda adalah kelanjutan arsitek project ini. Baca seluruh bundle berurutan:")
-    lines.append("aturan workflow (blueprint), state project, lalu source engine XP di bagian akhir.")
-    lines.append("Jangan pernah menyentuh filesystem atau menjalankan perintah mutasi langsung.")
-    lines.append("Kirim hanya spec.json deklaratif; user akan menjalankannya lewat: xp pkg-build lalu menu XP.")
-    lines.append("")
-    lines.append("===== PROJECT REGISTRY =====")
-    registry = ProjectRegistry.for_home(paths.home)
-    for item in registry.list_projects():
-        lines.append(f"- {item.project_id} | {item.name} | repo: {item.repo_path or '(remote-only)'}")
-    lines.append("")
-    lines.append("===== PROFILE (.xp/project.json) =====")
-    lines.append((repo / ".xp" / "project.json").read_text(encoding="utf-8"))
-    lines.append("===== POLICIES (.xp/policies.json) =====")
-    lines.append((repo / ".xp" / "policies.json").read_text(encoding="utf-8"))
-    lines.append("===== COMPATIBILITY (.xp/compatibility.json) =====")
-    lines.append((repo / ".xp" / "compatibility.json").read_text(encoding="utf-8"))
-    bp = repo / "docs" / "blueprint" / "15_WORKFLOW_PROFILE.md"
-    if bp.is_file():
-        lines.append("===== BLUEPRINT SNAPSHOT (15_WORKFLOW_PROFILE.md) =====")
-        lines.append(bp.read_text(encoding="utf-8"))
-    rm = repo / "docs" / "checkpoints" / "ROADMAP_PROGRESS.md"
-    if rm.is_file():
-        lines.append("===== ROADMAP SNAPSHOT (ROADMAP_PROGRESS.md) =====")
-        lines.append(rm.read_text(encoding="utf-8"))
-    lines.append("===== CHECKPOINTS TERKUNCI (via XP) =====")
-    for milestone in _list_locked_milestones(profile.project_id):
-        lines.append(f"- {milestone}")
-    latest = _latest_run(paths, profile.project_id)
-    if latest is not None:
-        lines.append("===== RUN STATE TERAKHIR =====")
-        lines.append(json.dumps(dataclasses.asdict(latest), indent=2, default=str))
-    lines.append("===== SOURCE ENGINE XP =====")
-    src_root = Path(__file__).resolve().parent
-    for py in sorted(src_root.rglob("*.py")):
-        lines.append(f"##### FILE: {py.name} #####")
-        lines.append(py.read_text(encoding="utf-8"))
-    out_dir = paths.home / "storage" / "downloads" / "Expert"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    out = out_dir / f"XP_BUNDLE_{profile.project_id}_{stamp}.txt"
-    out.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Bundle dibuat: {out}")
-    print(f"Ukuran: {out.stat().st_size} bytes. Lampirkan file ini ke chat AI baru (jangan paste manual).")
+
+    print(f"Bundle dibuat: {artifact.path}")
+    print(f"Mode: {artifact.mode}")
+    print(
+        f"Ukuran: {artifact.size_bytes} bytes. "
+        "Lampirkan file ini ke chat AI baru (jangan paste manual)."
+    )
     return 0
-
-
-
 def _project_init(name: str) -> int:
     from datetime import date
     import shutil
