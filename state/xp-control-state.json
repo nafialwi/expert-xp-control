@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-13T09:44:10.357940+00:00",
+        "last_active_at": "2026-09-13T10:39:41.776712+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -84,7 +84,7 @@
       "run_id": "segeran-jiwa-pos-next-CS-02-CS-03-RETROACTIVE-CLOSURE-f2f6002b",
       "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-13T10:27:55.476443+00:00"
+      "updated_at": "2026-09-13T10:27:57.698035+00:00"
     },
     {
       "created_at": "2026-09-11T15:04:14.012793+00:00",
@@ -242,6 +242,24 @@
       "stage": "LOCKED_REMOTE",
       "state_version": 1,
       "updated_at": "2026-09-12T16:25:54.250441+00:00"
+    },
+    {
+      "created_at": "2026-09-13T10:39:45.669996+00:00",
+      "metadata": {
+        "_last_stage": "PACKAGE_VALIDATED",
+        "base_fingerprint": "28a4e66a6252f8cd0c5cfd4cf07f7932acbd204d56098d13363802aacf7c87ec",
+        "branch": "work/cs02-cs03-closure",
+        "head": "673fb92c9e0db3aec2e6cb7f1dc1c3f639498ccc",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-ROADMAP-PROGRESS-UPDATE-POST-CLOSURE-1cee79d6/package.zip",
+        "remote_lease": "ACTIVE",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": "ROADMAP-PROGRESS-UPDATE-POST-CLOSURE",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-ROADMAP-PROGRESS-UPDATE-POST-CLOSURE-1cee79d6",
+      "stage": "PACKAGE_VALIDATED",
+      "state_version": 1,
+      "updated_at": "2026-09-13T10:39:49.071160+00:00"
     }
   ]
 }
