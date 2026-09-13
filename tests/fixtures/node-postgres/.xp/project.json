@@ -1,0 +1,15 @@
+{
+  "database_adapter": "postgresql",
+  "deployment_adapter": null,
+  "metadata": {
+    "fixture": "xp-plus-xp07"
+  },
+  "name": "Node PostgreSQL Fixture",
+  "profile_version": 1,
+  "project_id": "fixture-node-postgres",
+  "runtimes": [
+    "node"
+  ],
+  "source_adapter": "git",
+  "verify_adapter": "npm-script"
+}

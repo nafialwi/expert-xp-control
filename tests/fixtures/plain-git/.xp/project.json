@@ -1,0 +1,13 @@
+{
+  "database_adapter": null,
+  "deployment_adapter": null,
+  "metadata": {
+    "fixture": "xp-plus-xp07"
+  },
+  "name": "Plain Git Fixture",
+  "profile_version": 1,
+  "project_id": "fixture-plain-git",
+  "runtimes": [],
+  "source_adapter": "git",
+  "verify_adapter": null
+}

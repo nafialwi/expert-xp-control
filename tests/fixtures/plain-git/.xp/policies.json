@@ -1,0 +1,19 @@
+{
+  "allowed_branch_prefixes": [
+    "work/",
+    "xp/recovery/"
+  ],
+  "deployment": {
+    "production": "DISABLED",
+    "reason": "acceptance fixture; no production deploy"
+  },
+  "protected_branches": [
+    "main",
+    "master"
+  ],
+  "remote_safepoint": {
+    "enabled": true,
+    "remote": "origin"
+  },
+  "source_verify": []
+}

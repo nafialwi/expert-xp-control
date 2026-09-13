@@ -1,0 +1,7 @@
+{
+  "database_commands": [],
+  "required_commands": [
+    "git",
+    "python"
+  ]
+}

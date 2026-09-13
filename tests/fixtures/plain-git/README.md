@@ -1,0 +1,1 @@
+# Plain Git XP+ fixture

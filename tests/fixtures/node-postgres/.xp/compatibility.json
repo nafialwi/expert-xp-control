@@ -1,0 +1,10 @@
+{
+  "database_commands": [
+    "psql"
+  ],
+  "required_commands": [
+    "git",
+    "node",
+    "npm"
+  ]
+}

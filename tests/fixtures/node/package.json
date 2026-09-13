@@ -1,0 +1,7 @@
+{
+  "name": "xp-plus-node-fixture",
+  "private": true,
+  "scripts": {
+    "verify": "node verify.js"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "xp-plus-node-postgres-fixture",
+  "private": true,
+  "scripts": {
+    "verify": "node verify.js"
+  }
+}

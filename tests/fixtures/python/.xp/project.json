@@ -1,0 +1,15 @@
+{
+  "database_adapter": null,
+  "deployment_adapter": null,
+  "metadata": {
+    "fixture": "xp-plus-xp07"
+  },
+  "name": "Python Fixture",
+  "profile_version": 1,
+  "project_id": "fixture-python",
+  "runtimes": [
+    "python"
+  ],
+  "source_adapter": "git",
+  "verify_adapter": "python-module"
+}
