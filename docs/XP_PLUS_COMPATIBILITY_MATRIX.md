@@ -1,0 +1,21 @@
+# XP+ Compatibility Matrix — XP+-09 Stable Gate
+
+| ID | Gate | Result | Commit | Timestamp UTC | Zone 1 Proof | Zone 2 Proof | Evidence |
+|---|---|---|---|---|---|---|---|
+| S1 | Rollback hard-stop + atomic metadata + mismatch guard | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:15:18Z | — | — | test_rollback_without_previous_version_hard_stops; test_rollback_missing_previous_engine_hard_stops; test_switch_path_is_atomic_via_os_replace; test_activate_candidate_wrong_version_hard_stops |
+| §14-1 | §14-1 Plain Git | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:15:33Z | — | — | test_plain_git_registry_package_branch_safepoint_and_lock |
+| §14-2 | §14-2 Node | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:15:33Z | — | — | test_node_runtime_discovery_and_npm_verification |
+| §14-3 | §14-3 Python | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:15:33Z | — | — | test_python_runtime_discovery_and_python_verification |
+| §14-4 | §14-4 Node + PostgreSQL | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:15:33Z | — | — | test_node_postgres_source_verify_db_approval_and_sql_test_mock_boundary |
+| §14-5 | §14-5 Firebase/static | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:15:33Z | — | — | test_firebase_static_has_no_postgres_assumption_and_onboarding_verify_is_real |
+| §14-6 | §14-6 Legacy | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:38Z | adcfe03557b20cf456a03556cf56c4e7576b7b5cad0b60e7984364901fd9b9c8 == after | canonical boundary unchanged | installed-candidate shadow; production calls=0 |
+| §14-7 | §14-7 Next | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:38Z | 38284ac602a78b45d9538cd58e35dfdd928579a3cd0ec172676141a4b5ac9e1f == after | canonical boundary unchanged | installed-candidate shadow; production calls=0 |
+| Z1-L | Zone 1 Legacy | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:38Z | adcfe03557b20cf456a03556cf56c4e7576b7b5cad0b60e7984364901fd9b9c8 == adcfe03557b20cf456a03556cf56c4e7576b7b5cad0b60e7984364901fd9b9c8 | — | full-tree byte immutability; no command execution in original |
+| Z1-N | Zone 1 Next | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:38Z | 38284ac602a78b45d9538cd58e35dfdd928579a3cd0ec172676141a4b5ac9e1f == 38284ac602a78b45d9538cd58e35dfdd928579a3cd0ec172676141a4b5ac9e1f | — | full-tree byte immutability; no command execution in original |
+| Z2-L | Zone 2 Legacy | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:38Z | — | canonical boundary unchanged | ignored changes=[] |
+| Z2-N | Zone 2 Next | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:38Z | — | canonical boundary unchanged | ignored changes=["dist/_redirects", "dist/assets/index-BC2lNTs0.css", "dist/assets/index-yeB1ALx2.js", "dist/index.html", "node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/results.json"] |
+| SHADOW | Installed-candidate shadow | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:38Z | Legacy+Next full-tree match | Legacy+Next canonical unchanged | installed 2.1.0-rc1 artifact; production DB/deploy calls=0 |
+| COPY-HOME | Copy-home drill | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:40Z | — | — | registry=5; checkpoints=4; rc18.3->rc1->rc18.3 |
+| CLEAN-RC | Clean-install RC commit | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:41Z | — | — | xp version=2.1.0-rc1; xp schema work PASS; self-test PASS |
+| UPGRADE | rc18.3 -> 2.1.0 projected upgrade | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:42Z | — | — | ephemeral stable projection; activate+rollback PASS; previous after rollback=2.1.0 |
+| FAIL-ROLLBACK | Failed-candidate automatic rollback | PASS | a86ad4f3a18fd3c6d0c469bfc868115f37447cfb | 2026-09-13T04:16:42Z | — | — | INSTALLED projected candidate artifact: test_false_health_check_rolls_back (tests.test_engine_lifecycle.EngineLifecycleTests.test_false_health_check_rolls_back) ... ok; test_health_exception_rolls_back_then_reraises (tests.test_engine_lifecycle.EngineLifecycleTests.test_health_exception_rolls_back_then_reraises) ... ok |
