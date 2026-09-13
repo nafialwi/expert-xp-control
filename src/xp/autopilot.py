@@ -10,6 +10,7 @@ from typing import Any
 
 from .adapters.base import AdapterError
 from .adapters.git import GitAdapter
+from .adapters.generic import GenericToolchainAdapter
 from .adapters.node import NodeAdapter
 from .adapters.postgresql import PostgreSQLAdapter, classify_sql
 from .adapters.python_runtime import PythonAdapter
@@ -184,28 +185,84 @@ class AutopilotController:
         return AutopilotResult(outcome, "WAITING_GPT", message, state.run_id, handoff)
 
     def _verify_source(self, repo: Path, policy: dict[str, Any]) -> tuple[bool, str, str, tuple[str, ...]]:
+        from .redaction import redact_text
+
         steps = list(policy.get("source_verify") or [])
         if not steps:
             return True, "No source verification steps declared", "CLEAR", ()
+
         logs: list[str] = []
+        generic = None
         for step in steps:
             adapter = step.get("adapter")
             try:
+                before_fp = GitAdapter(repo).working_fingerprint()
+
                 if adapter == "python":
                     module = str(step.get("module", "unittest"))
                     runner = PythonAdapter(repo, allowed_modules={module})
-                    result = runner.run_module(module, [str(x) for x in step.get("args", [])])
+                    timeout = int(step.get("timeout", 1800))
+                    if not 1 <= timeout <= 3600:
+                        raise ValueError(
+                            "verify timeout must be 1..3600 seconds"
+                        )
+                    result = runner.run_module(
+                        module,
+                        [str(x) for x in step.get("args", [])],
+                        timeout=timeout,
+                    )
                 elif adapter == "node":
                     runner = NodeAdapter(repo)
-                    result = runner.run_script(str(step["script"]))
+                    timeout = int(step.get("timeout", 1800))
+                    if not 1 <= timeout <= 3600:
+                        raise ValueError(
+                            "verify timeout must be 1..3600 seconds"
+                        )
+                    result = runner.run_script(
+                        str(step["script"]),
+                        timeout=timeout,
+                    )
+                elif adapter == "generic":
+                    if generic is None:
+                        generic = GenericToolchainAdapter(
+                            repo,
+                            policy.get("toolchain_commands") or {},
+                        )
+                    command_id = str(step.get("command") or "").strip()
+                    result = generic.run(command_id)
                 else:
-                    return False, f"Unsupported verify adapter: {adapter}", "ERROR", ()
+                    return (
+                        False,
+                        f"Unsupported verify adapter: {adapter}",
+                        "ERROR",
+                        (),
+                    )
+
+                stdout = redact_text(result.stdout or "")
+                stderr = redact_text(result.stderr or "")
+                logs.extend([stdout, stderr])
+
+                after_fp = GitAdapter(repo).working_fingerprint()
+                if before_fp != after_fp:
+                    return (
+                        False,
+                        "\n".join(logs)
+                        + "\nVerification command mutated source outside the approved package.",
+                        "ERROR",
+                        (),
+                    )
+
+                if result.returncode != 0:
+                    return False, "\n".join(logs), "ERROR", ()
             except Exception as exc:
-                from .redaction import redact_text
-                return False, f"Source verification tidak selesai: {redact_text(str(exc))}", "ERROR", ()
-            logs.extend([result.stdout, result.stderr])
-            if result.returncode != 0:
-                return False, "\n".join(logs), "ERROR", ()
+                return (
+                    False,
+                    "Source verification tidak selesai: "
+                    + redact_text(str(exc)),
+                    "ERROR",
+                    (),
+                )
+
         log_text = "\n".join(logs)
         warning_policy = dict(policy.get("warnings") or {})
         warning_result = classify_warnings(

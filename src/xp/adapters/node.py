@@ -4,7 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from .base import CapabilityAdapter
+from .base import AdapterReadiness, CapabilityAdapter
 
 
 class BoundedCommandError(ValueError):
@@ -22,6 +22,28 @@ class NodeAdapter(CapabilityAdapter):
 
     def capabilities(self) -> set[str]:
         return {"node-environment", "npm-script"}
+
+    def readiness(self) -> AdapterReadiness:
+        import shutil
+        missing = [
+            command for command in ("node", "npm")
+            if shutil.which(command) is None
+        ]
+        if missing:
+            return AdapterReadiness(
+                False,
+                "NOT_READY",
+                "Missing executable(s): " + ", ".join(missing),
+                tuple(sorted(self.capabilities())),
+                {"scripts": sorted(self.scripts)},
+            )
+        return AdapterReadiness(
+            True,
+            "READY",
+            "Node/npm and package.json are available.",
+            tuple(sorted(self.capabilities())),
+            {"scripts": sorted(self.scripts)},
+        )
 
     def resolve_script(self, script: str) -> list[str]:
         if script not in self.scripts:

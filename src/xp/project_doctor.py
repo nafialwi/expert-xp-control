@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .adapters.generic import GenericToolchainAdapter
 from .project_registry import ProjectProfileError, load_project_profile
 
 
@@ -320,6 +321,7 @@ class ProjectDoctor:
         else:
             malformed = False
             for index, step in enumerate(source_verify):
+                adapter_name = str(step.get("adapter") or "").strip() if isinstance(step, dict) else ""
                 if not isinstance(step, dict) or not str(step.get("adapter") or "").strip():
                     malformed = True
                     self._add(
@@ -329,6 +331,44 @@ class ProjectDoctor:
                         f"source_verify[{index}] is not a valid adapter step.",
                         "Repair verification explicitly.",
                     )
+                if adapter_name == "generic":
+                    command_id = str(step.get("command") or "").strip()
+                    declarations = policies.get("toolchain_commands") or {}
+                    if not command_id:
+                        incomplete = True
+                        self._add(
+                            findings,
+                            "GENERIC_COMMAND_MISSING",
+                            "BLOCKER",
+                            f"source_verify[{index}] has no generic command id.",
+                            "Reference an explicitly declared toolchain command.",
+                        )
+                    else:
+                        try:
+                            generic = GenericToolchainAdapter(
+                                repo, declarations
+                            )
+                            generic.resolve(command_id)
+                            ready = generic.readiness()
+                        except Exception as exc:
+                            incomplete = True
+                            self._add(
+                                findings,
+                                "GENERIC_TOOLCHAIN_INVALID",
+                                "BLOCKER",
+                                f"Generic toolchain policy is invalid: {exc}",
+                                "Fix the allow-listed generic toolchain declaration.",
+                            )
+                        else:
+                            if not ready.ready:
+                                incomplete = True
+                                self._add(
+                                    findings,
+                                    "GENERIC_TOOLCHAIN_NOT_READY",
+                                    "BLOCKER",
+                                    ready.detail,
+                                    "Install/repair the declared local toolchain.",
+                                )
             if malformed:
                 incomplete = True
             else:

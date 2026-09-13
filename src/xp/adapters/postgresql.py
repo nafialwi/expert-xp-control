@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from dataclasses import dataclass
 from pathlib import Path
 
-from .base import CapabilityAdapter
+from .base import AdapterReadiness, CapabilityAdapter
 from ..redaction import redact_text
 
 
@@ -94,6 +94,33 @@ class PostgreSQLAdapter(CapabilityAdapter):
 
     def capabilities(self) -> set[str]:
         return {"postgresql-environment", "sql-classification", "psql-file"}
+
+    def readiness(self) -> AdapterReadiness:
+        env = self.environment_status(check_connection=False)
+        if not env.psql_present:
+            status = "NOT_READY"
+            ready = False
+            detail = "psql executable not found"
+        elif not env.database_url_present:
+            status = "READY_WITH_LIMITATIONS"
+            ready = True
+            detail = "psql is available; DATABASE_URL is session-unconfigured"
+        else:
+            status = "READY"
+            ready = True
+            detail = "psql is available and session credential is present"
+
+        return AdapterReadiness(
+            ready,
+            status,
+            detail,
+            tuple(sorted(self.capabilities())),
+            {
+                "psql_present": env.psql_present,
+                "database_url_present": env.database_url_present,
+                "connection_checked": False,
+            },
+        )
 
     def environment_status(self, check_connection: bool = True) -> PostgreSQLEnvironmentStatus:
         psql_present = (Path(self.psql_bin).exists() if "/" in self.psql_bin else shutil.which(self.psql_bin) is not None)

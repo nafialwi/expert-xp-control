@@ -5,7 +5,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .base import AdapterError, CapabilityAdapter
+from .base import AdapterError, AdapterReadiness, CapabilityAdapter
 
 
 
@@ -39,6 +39,37 @@ class GitAdapter(CapabilityAdapter):
 
     def capabilities(self) -> set[str]:
         return {"git-state", "git-fingerprint", "git-fetch", "git-push"}
+
+    def readiness(self) -> AdapterReadiness:
+        import shutil
+        if shutil.which("git") is None:
+            return AdapterReadiness(
+                False, "NOT_READY", "git executable not found",
+                tuple(sorted(self.capabilities())),
+            )
+        if not (self.repo / ".git").exists():
+            return AdapterReadiness(
+                False, "NOT_READY", "repository has no .git metadata",
+                tuple(sorted(self.capabilities())),
+            )
+        try:
+            state = self.state(fetch=False)
+        except Exception as exc:
+            return AdapterReadiness(
+                False, "NOT_READY", f"git state unavailable: {exc}",
+                tuple(sorted(self.capabilities())),
+            )
+        return AdapterReadiness(
+            True,
+            "READY",
+            "Git repository is readable without network access.",
+            tuple(sorted(self.capabilities())),
+            {
+                "branch": state.branch,
+                "dirty": state.dirty,
+                "remote_configured": bool(state.remote),
+            },
+        )
 
     def _run(self, *args: str, check: bool = True) -> str:
         result = subprocess.run(
