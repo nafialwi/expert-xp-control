@@ -50,10 +50,18 @@
     {
       "created_at": "2026-09-13T09:44:14.220525+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "WAITING_GPT",
         "base_fingerprint": "4707fcbe0d56224903c1808cddbfc1d6b7f329ca145d6667dbe68fe94f02192d",
         "branch": "work/cs02-cs03-closure",
+        "changed_paths": [
+          "docs/checkpoints/CS-02_CHECKPOINT_REPORT.md",
+          "docs/checkpoints/CS-03_CHECKPOINT_REPORT.md"
+        ],
+        "control_sync": "CLEAR",
+        "failure_message": "Source verification gagal.",
         "head": "0398e4ab93f5032b26007a4776de6e1e692e7837",
+        "incident_challenge": "f3a2f574cca81f16ca654ab6afb584a7",
+        "incident_id": "INC-CE779ECE",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-02-CS-03-RETROACTIVE-CLOSURE-f2f6002b/package.zip",
         "remote_lease": "ACTIVE",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
@@ -61,9 +69,9 @@
       "milestone": "CS-02-CS-03-RETROACTIVE-CLOSURE",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-02-CS-03-RETROACTIVE-CLOSURE-f2f6002b",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-13T09:44:18.576533+00:00"
+      "updated_at": "2026-09-13T09:44:26.278309+00:00"
     },
     {
       "created_at": "2026-09-11T15:04:14.012793+00:00",
