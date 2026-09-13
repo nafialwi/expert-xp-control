@@ -28,6 +28,9 @@ class EngineLifecycleTests(unittest.TestCase):
             "    if sys.argv[1:] == ['version']:\n"
             "        print(f'Expert Workstation XP {__version__}')\n"
             "        return 0\n"
+            "    if sys.argv[1:] == ['self-test']:\n"
+            "        print('CORE: CLEAR')\n"
+            "        return 0\n"
             "    return 2\n"
             "if __name__ == '__main__':\n"
             "    raise SystemExit(main())\n",
@@ -40,6 +43,23 @@ class EngineLifecycleTests(unittest.TestCase):
             f"        self.assertTrue({compat_pass!r})\n",
             encoding="utf-8",
         )
+        (package / "schema.py").write_text(
+            "def schema_for(kind):\n"
+            "    return {'schema_name': kind}\n",
+            encoding="utf-8",
+        )
+        (package / "compatibility.py").write_text(
+            "class Item:\n"
+            "    def __init__(self, code, status): self.code=code; self.status=status\n"
+            "class Report:\n"
+            "    status='CLEAR'\n"
+            "    read_only=True\n"
+            "    checks=(Item('STATE_V1','CLEAR'), Item('REGISTRY_V1','CLEAR'), Item('READ_ONLY','CLEAR'))\n"
+            "class CompatibilityAudit:\n"
+            "    def __init__(self, home=None): self.home=home\n"
+            "    def run(self, target): return Report()\n",
+            encoding="utf-8",
+        )
         return source
 
     @staticmethod
@@ -48,6 +68,12 @@ class EngineLifecycleTests(unittest.TestCase):
         root = home / ".expert-workstation"
         root.mkdir(parents=True)
         (root / "active-version").write_text("2.0.0-rc18.3\n", encoding="utf-8")
+        base_pkg = root / "versions" / "2.0.0-rc18.3" / "src" / "xp"
+        base_pkg.mkdir(parents=True)
+        (base_pkg / "__init__.py").write_text(
+            '__version__ = "2.0.0-rc18.3"\n',
+            encoding="utf-8",
+        )
         return EngineLifecycle(home), root
 
     def test_install_candidate_is_side_by_side_and_does_not_switch_active_version(self):

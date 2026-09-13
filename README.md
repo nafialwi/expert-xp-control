@@ -116,3 +116,26 @@ scope, sensitive-environment withholding, output redaction, network/deploy
 blocking, and source-mutation guard. Built-in adapter signatures remain
 unchanged. Full handshake and compatibility-matrix documentation is finalized
 at XP+-09/XP+-10.
+
+<!-- XP+-10 RC18.3 BOOTSTRAP KNOWN LIMITATION -->
+## XP+ 2.1.0 — rc18.3 one-time upgrade limitation
+
+Recorded: `2026-09-13T06:55:10.142751+00:00`.
+
+The rc18.3 built-in `xp upgrade` is defective: it writes `versions/` and
+`active-version` outside the canonical `.expert-workstation` state root.
+It can therefore print an upgrade-success message while canonical
+`active-version` remains `2.0.0-rc18.3`.
+
+The supported one-time path from rc18.3 to XP+ 2.1.0 is the published
+`xp-rc183-to-210-bootstrap.py` release asset together with
+`XP_PLUS_2.1.0_ENGINE.zip` and `SHA256SUMS.txt`. The bootstrap is stdlib-only
+and delegates lifecycle validation/activation/health-check/rollback semantics
+to XP+ `EngineLifecycle`; it does not implement a second activation path.
+
+For origin >= 2.1.0, `xp upgrade` remains the supported EngineLifecycle public
+update path.
+
+Legacy `<home>/active-version` and `<home>/versions` outside the canonical XP
+root are a **REPORT-ONLY** compatibility finding. XP and the bootstrap never
+delete them automatically; cleanup requires explicit user approval.

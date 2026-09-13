@@ -48,6 +48,9 @@ class UpgradeFromRC183Tests(unittest.TestCase):
             "    if sys.argv[1:] == ['version']:\n"
             "        print(f'Expert Workstation XP {__version__}')\n"
             "        return 0\n"
+            "    if sys.argv[1:] == ['self-test']:\n"
+            "        print('CORE: CLEAR')\n"
+            "        return 0\n"
             "    return 2\n"
             "if __name__ == '__main__':\n"
             "    raise SystemExit(main())\n",
@@ -57,6 +60,24 @@ class UpgradeFromRC183Tests(unittest.TestCase):
             "import unittest\n"
             "class Compat(unittest.TestCase):\n"
             "    def test_v1(self): self.assertEqual(1, 1)\n",
+            encoding="utf-8",
+        )
+
+        (package / "schema.py").write_text(
+            "def schema_for(kind):\n"
+            "    return {'schema_name': kind}\n",
+            encoding="utf-8",
+        )
+        (package / "compatibility.py").write_text(
+            "class Item:\n"
+            "    def __init__(self, code, status): self.code=code; self.status=status\n"
+            "class Report:\n"
+            "    status='CLEAR'\n"
+            "    read_only=True\n"
+            "    checks=(Item('STATE_V1','CLEAR'), Item('REGISTRY_V1','CLEAR'), Item('READ_ONLY','CLEAR'))\n"
+            "class CompatibilityAudit:\n"
+            "    def __init__(self, home=None): self.home=home\n"
+            "    def run(self, target): return Report()\n",
             encoding="utf-8",
         )
 

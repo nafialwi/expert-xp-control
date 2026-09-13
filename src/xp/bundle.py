@@ -111,6 +111,16 @@ class BundleBuilder:
             yield f"##### FILE: {label} #####"
             yield py.read_text(encoding="utf-8", errors="replace")
 
+    def compact(self, repo: Path) -> str:
+        """Return the locked-plan compact bundle string using the stable builder."""
+        artifact = self.build(repo, deep=False)
+        return artifact.path.read_text(encoding="utf-8")
+
+    def deep(self, repo: Path) -> str:
+        """Return the locked-plan deep bundle string using the stable builder."""
+        artifact = self.build(repo, deep=True)
+        return artifact.path.read_text(encoding="utf-8")
+
     def build(
         self,
         repo: Path,

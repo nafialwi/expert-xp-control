@@ -39,6 +39,7 @@ def audit_workstation(
 ) -> ReadinessReport:
     home = Path(home).expanduser().resolve()
     checks: list[ReadinessCheck] = []
+    from .compatibility_audit import find_legacy_upgrade_stray_artifacts
 
     # Core workstation requirements.
     for command in ("python", "git"):
@@ -55,6 +56,26 @@ def audit_workstation(
         writable = False
     _add(checks, "STATE_STORAGE", "CLEAR" if writable else "BLOCKER", "Penyimpanan XP", "Siap" if writable else "Tidak dapat ditulis")
 
+    legacy_strays = find_legacy_upgrade_stray_artifacts(home)
+    if legacy_strays:
+        legacy_detail = "REPORT-ONLY: " + ", ".join(
+            str(item.path) for item in legacy_strays
+        ) + "; XP does not delete these inherited rc18.3 artifacts; cleanup requires explicit user approval"
+        _add(
+            checks,
+            "LEGACY_UPGRADE_STRAY_ARTIFACTS",
+            "INFO",
+            "Legacy rc18.3 upgrade artifacts",
+            legacy_detail,
+        )
+    else:
+        _add(
+            checks,
+            "LEGACY_UPGRADE_STRAY_ARTIFACTS",
+            "CLEAR",
+            "Legacy rc18.3 upgrade artifacts",
+            "Tidak terdeteksi",
+        )
     registry = ProjectRegistry.for_home(home)
     project = project_override or registry.last_active()
     if not project:

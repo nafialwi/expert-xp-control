@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import datetime, timezone
 import os
 import shutil
@@ -13,10 +14,39 @@ from .paths import XPPaths
 
 
 @dataclass(frozen=True)
+class EngineCandidate:
+    version: str
+    path: Path
+    status: str
+
+
+@dataclass(frozen=True)
+class HealthCheckRecord:
+    code: str
+    status: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class EngineHealthReport:
+    ok: bool
+    version: str
+    checks: tuple[HealthCheckRecord, ...]
+
+    @property
+    def status(self) -> str:
+        return "CLEAR" if self.ok else "BLOCKED"
+
+    def status_map(self) -> dict[str, str]:
+        return {item.code: item.status for item in self.checks}
+
+
+@dataclass(frozen=True)
 class EngineLifecycleResult:
     status: str
     version: str
     path: Path
+    health: EngineHealthReport | None = None
 
 
 @dataclass(frozen=True)
@@ -239,26 +269,220 @@ class EngineLifecycle:
         return result
 
 
-    def activate_with_health_check(self, version: str, *, health_check) -> EngineLifecycleResult:
+    @staticmethod
+    def _engine_tree_hash(root: Path) -> str:
+        digest = hashlib.sha256()
+        root = Path(root)
+        for path in sorted(root.rglob("*"), key=lambda item: item.as_posix()):
+            if (
+                ".git" in path.parts
+                or "__pycache__" in path.parts
+                or path.suffix == ".pyc"
+            ):
+                continue
+            if not path.is_file():
+                continue
+            digest.update(path.relative_to(root).as_posix().encode("utf-8") + b"\0")
+            digest.update(path.read_bytes())
+        return digest.hexdigest()
+
+    def _health_json_child(
+        self,
+        destination: Path,
+        code: str,
+        *,
+        timeout: int = 60,
+        extra_env: dict[str, str] | None = None,
+    ) -> tuple[bool, str]:
+        env = self._safe_env(destination / "src", self.home)
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        if extra_env:
+            env.update(extra_env)
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=destination,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=timeout,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return False, f"child execution failed: {exc}"
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "child returned nonzero").strip()
+            return False, detail[-1000:]
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        if not lines:
+            return False, "child returned no structured result"
+        try:
+            payload = json.loads(lines[-1])
+        except json.JSONDecodeError as exc:
+            return False, f"child JSON decode failed: {exc}"
+        return bool(payload.get("ok")), str(payload.get("detail") or "")
+
+    def health_check(self, version: str) -> EngineHealthReport:
+        """Run the production post-activation health authority for one engine version."""
+        version = str(version).strip()
+        destination = self.paths.versions / version
+        records: list[HealthCheckRecord] = []
+
+        active_ok = self.active_version() == version
+        records.append(
+            HealthCheckRecord(
+                "active-version",
+                "CLEAR" if active_ok else "BLOCKED",
+                f"active={self.active_version() or '-'}; expected={version or '-'}",
+            )
+        )
+
+        preflight = self._check_installed_path(version, destination)
+        import_ok = (
+            preflight.checks.get("install-shape") != "BLOCKED"
+            and preflight.checks.get("import") == "CLEAR"
+        )
+        records.append(
+            HealthCheckRecord(
+                "candidate-import-integrity",
+                "CLEAR" if import_ok else "BLOCKED",
+                f"stable primitive: {preflight.checks}",
+            )
+        )
+        cli_ok = preflight.checks.get("cli-version") == "CLEAR"
+        records.append(
+            HealthCheckRecord(
+                "cli-startup",
+                "CLEAR" if cli_ok else "BLOCKED",
+                f"stable primitive cli-version={preflight.checks.get('cli-version', 'missing')}",
+            )
+        )
+        compat_pre_ok = preflight.checks.get("compat-v1") == "CLEAR"
+        records.append(
+            HealthCheckRecord(
+                "compat-v1-preflight",
+                "CLEAR" if compat_pre_ok else "BLOCKED",
+                f"stable primitive compat-v1={preflight.checks.get('compat-v1', 'missing')}",
+            )
+        )
+
+        schema_code = (
+            "import json\n"
+            "from xp.schema import schema_for\n"
+            "schema=schema_for('work')\n"
+            "ok=isinstance(schema, dict) and schema.get('schema_name') == 'work'\n"
+            "print(json.dumps({'ok': ok, 'detail': 'schema_for(work) readable'}))\n"
+        )
+        schema_ok, schema_detail = self._health_json_child(destination, schema_code)
+        records.append(
+            HealthCheckRecord(
+                "schema-reader",
+                "CLEAR" if schema_ok else "BLOCKED",
+                schema_detail or "schema reader failed",
+            )
+        )
+
+        fixtures = destination / "tests" / "fixtures"
+        compatibility_code = (
+            "import json, os\n"
+            "from pathlib import Path\n"
+            "from xp.compatibility import CompatibilityAudit\n"
+            "target=Path(os.environ['XP_HEALTH_FIXTURES'])\n"
+            "report=CompatibilityAudit(Path(os.environ['XP_USER_HOME'])).run(target)\n"
+            "checks={item.code:item.status for item in report.checks}\n"
+            "ok=(report.status == 'CLEAR' and report.read_only "
+            "and checks.get('STATE_V1') == 'CLEAR' and checks.get('REGISTRY_V1') == 'CLEAR')\n"
+            "detail='status=%s read_only=%s STATE_V1=%s REGISTRY_V1=%s' % "
+            "(report.status, report.read_only, checks.get('STATE_V1'), checks.get('REGISTRY_V1'))\n"
+            "print(json.dumps({'ok': ok, 'detail': detail}))\n"
+        )
+        compatibility_ok, compatibility_detail = self._health_json_child(
+            destination,
+            compatibility_code,
+            extra_env={"XP_HEALTH_FIXTURES": str(fixtures)},
+        )
+        records.append(
+            HealthCheckRecord(
+                "registry-state-readability",
+                "CLEAR" if compatibility_ok else "BLOCKED",
+                compatibility_detail or "compatibility reader failed",
+            )
+        )
+
+        before_hash = self._engine_tree_hash(destination) if destination.is_dir() else ""
+        env = self._safe_env(destination / "src", self.home)
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        try:
+            self_test = subprocess.run(
+                [sys.executable, "-m", "xp.cli", "self-test"],
+                cwd=destination,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            self_test = None
+        after_hash = self._engine_tree_hash(destination) if destination.is_dir() else ""
+        self_test_ok = (
+            self_test is not None
+            and self_test.returncode == 0
+            and bool(before_hash)
+            and before_hash == after_hash
+        )
+        self_test_detail = (
+            "self-test exit=0; candidate bytes unchanged"
+            if self_test_ok
+            else "self-test failed or candidate bytes changed"
+        )
+        records.append(
+            HealthCheckRecord(
+                "no-mutation-self-test",
+                "CLEAR" if self_test_ok else "BLOCKED",
+                self_test_detail,
+            )
+        )
+
+        ok = all(item.status == "CLEAR" for item in records)
+        return EngineHealthReport(ok=ok, version=version, checks=tuple(records))
+
+    def activate_with_health_check(
+        self,
+        version: str,
+        *,
+        health_check=None,
+    ) -> EngineLifecycleResult:
         activated = self.activate_candidate(version)
         previous = self.previous_version()
         if previous is None:
             raise RuntimeError("previous engine version is missing after activation")
 
+        report = None
         try:
-            healthy = bool(health_check(activated.path))
+            if health_check is None:
+                report = self.health_check(version)
+                healthy = report.ok
+            else:
+                outcome = health_check(activated.path)
+                report = outcome if isinstance(outcome, EngineHealthReport) else None
+                healthy = outcome.ok if report is not None else bool(outcome)
         except Exception:
-            self._write_atomic(self._active_file, previous)
+            self.rollback_to_previous(reason="post-activation-health-exception")
             raise
 
         if healthy:
-            return activated
+            return EngineLifecycleResult(
+                "ACTIVATED",
+                version,
+                activated.path,
+                report,
+            )
 
-        self._write_atomic(self._active_file, previous)
+        rollback = self.rollback_to_previous(reason="post-activation-health-failed")
         return EngineLifecycleResult(
             "ROLLED_BACK",
-            previous,
-            self.paths.versions / previous,
+            rollback.version,
+            rollback.path,
+            report,
         )
 
     def promote_candidate(self, version: str) -> CandidatePromotionReport:
@@ -269,14 +493,8 @@ class EngineLifecycle:
         if pre.status != "CLEAR":
             return CandidatePromotionReport("BLOCKED", version, previous, pre.checks)
 
-        post_checks: dict[str, str] = {}
-
-        def post_health(path: Path) -> bool:
-            report = self._check_installed_path(version, path)
-            post_checks.update(report.checks)
-            return report.status == "CLEAR"
-
-        result = self.activate_with_health_check(version, health_check=post_health)
+        result = self.activate_with_health_check(version)
+        post_checks = result.health.status_map() if result.health is not None else {}
         if result.status == "ROLLED_BACK":
             return CandidatePromotionReport("ROLLED_BACK", version, previous, post_checks)
 
