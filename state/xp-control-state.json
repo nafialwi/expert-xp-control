@@ -50,14 +50,17 @@
     {
       "created_at": "2026-09-13T09:44:14.220525+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "4707fcbe0d56224903c1808cddbfc1d6b7f329ca145d6667dbe68fe94f02192d",
         "branch": "work/cs02-cs03-closure",
         "changed_paths": [
           "docs/checkpoints/CS-02_CHECKPOINT_REPORT.md",
           "docs/checkpoints/CS-03_CHECKPOINT_REPORT.md"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-02-CS-03-RETROACTIVE-CLOSURE-f2f6002b",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-02-CS-03-RETROACTIVE-CLOSURE-f2f6002b/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "673fb92c9e0db3aec2e6cb7f1dc1c3f639498ccc",
         "head": "0398e4ab93f5032b26007a4776de6e1e692e7837",
         "human_qa": {
           "notes": "QA manusia clear melalui menu XP",
@@ -65,21 +68,23 @@
           "timestamp": "2026-09-13T10:27:23.784239+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-02-CS-03-RETROACTIVE-CLOSURE-f2f6002b/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "resolved_incident_id": "INC-CE779ECE",
         "safepoint_head": "673fb92c9e0db3aec2e6cb7f1dc1c3f639498ccc",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-02-CS-03-RETROACTIVE-CLOSURE-f2f6002b/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "a2b193f3bd2349b60d89d0e622001ab395f3ee4fe6b8102f065e8e09fb56b033"
       },
       "milestone": "CS-02-CS-03-RETROACTIVE-CLOSURE",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-02-CS-03-RETROACTIVE-CLOSURE-f2f6002b",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-13T10:27:23.786087+00:00"
+      "updated_at": "2026-09-13T10:27:55.476443+00:00"
     },
     {
       "created_at": "2026-09-11T15:04:14.012793+00:00",
