@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-14T07:08:54.154624+00:00",
+        "last_active_at": "2026-09-14T07:10:33.305156+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -315,7 +315,7 @@
       "run_id": "segeran-jiwa-pos-next-CS-05-P3-UI-604ea3b0",
       "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-14T07:09:11.764933+00:00"
+      "updated_at": "2026-09-14T07:09:14.781324+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
@@ -353,6 +353,22 @@
       "stage": "LOCKED_REMOTE",
       "state_version": 1,
       "updated_at": "2026-09-13T10:56:43.476417+00:00"
+    },
+    {
+      "created_at": "2026-09-14T07:10:38.098525+00:00",
+      "metadata": {
+        "_last_stage": "WAITING_GPT",
+        "failure_message": "Project memiliki perubahan lokal sebelum pekerjaan dimulai; source tidak diubah.",
+        "incident_challenge": "5ef910d3f1b3152039840b90a326c7fe",
+        "incident_id": "INC-44BE1062",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": null,
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-blocked",
+      "stage": "WAITING_GPT",
+      "state_version": 1,
+      "updated_at": "2026-09-14T07:10:38.099886+00:00"
     }
   ]
 }
