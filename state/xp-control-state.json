@@ -285,7 +285,7 @@
     {
       "created_at": "2026-09-14T07:08:58.646144+00:00",
       "metadata": {
-        "_last_stage": "WAITING_GPT",
+        "_last_stage": "HUMAN_QA",
         "base_fingerprint": "15453fafd213b22665a6874f8ce6997e2f8fe5b5f3d552222c49674d06bc619e",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -302,31 +302,28 @@
           "tests/test_cs02_migrations.py"
         ],
         "control_sync": "CLEAR",
-        "failure_message": "Human QA menemukan masalah.",
         "head": "e46ab010e04a06d059dd1273cf6ec80af1267fa3",
         "human_qa": {
           "notes": "Trigger melanggar fact-immutable sales (SJ_IMMUTABLE_FACT); fix: hapus backfill shift_id, relasi via cash_transactions.reference_id.",
           "status": "PROBLEM",
           "timestamp": "2026-09-14T11:18:46.773524+00:00"
         },
-        "incident_challenge": "6514a5adb6d4b192a35b3ea5d0306525",
-        "incident_id": "INC-120F54C4",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-P3-UI-604ea3b0/package.zip",
         "remote_lease": "ACTIVE",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
-        "resolved_incident_id": "INC-91C4462F",
-        "safepoint_head": "e1561bda229e74a8fc4310d2886ae3613bffe313",
+        "resolved_incident_id": "INC-120F54C4",
+        "safepoint_head": "a91c563308df2230197cf4337ec191bf30c83577",
         "safepoint_pushed": true,
         "warning_status": "KNOWN",
-        "working_fingerprint": "b05ec6746bcf7f4329be32dac4f646c0cddfce06b64b7501ef00170f2ef8f336"
+        "working_fingerprint": "21ab9a67fffa38e0f5f780f90f705218de8cc3e745283f1150a295d7207ccdae"
       },
       "milestone": "CS-05-P3-UI",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-05-P3-UI-604ea3b0",
-      "stage": "WAITING_GPT",
+      "stage": "HUMAN_QA",
       "state_version": 1,
-      "updated_at": "2026-09-14T11:18:46.794259+00:00"
+      "updated_at": "2026-09-14T11:19:15.292604+00:00"
     },
     {
       "created_at": "2026-09-14T10:43:10.262610+00:00",
