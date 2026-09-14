@@ -360,7 +360,8 @@
         "_last_stage": "WAITING_GPT",
         "base_fingerprint": "4790c418a2e8d4b2a5b4c56a45c644e522d8301401b63e897e064758a2829492",
         "branch": "work/cs06743-patch3-hardening",
-        "failure_message": "Paket XP tidak cocok dengan kondisi project.",
+        "control_sync": "CLEAR",
+        "failure_message": "Remediation tidak cocok dengan incident aktif.",
         "head": "f1b03384b05873d3f807c4d976c83746f1decae4",
         "incident_challenge": "90b12a6159ed221feb27a05870472560",
         "incident_id": "INC-AB3D2675",
@@ -372,7 +373,7 @@
       "run_id": "segeran-jiwa-pos-next-blocked",
       "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-14T09:52:09.129161+00:00"
+      "updated_at": "2026-09-14T10:01:33.753315+00:00"
     }
   ]
 }
