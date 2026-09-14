@@ -285,7 +285,7 @@
     {
       "created_at": "2026-09-14T07:08:58.646144+00:00",
       "metadata": {
-        "_last_stage": "HUMAN_QA",
+        "_last_stage": "READY_TO_LOCK",
         "base_fingerprint": "15453fafd213b22665a6874f8ce6997e2f8fe5b5f3d552222c49674d06bc619e",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -304,9 +304,9 @@
         "control_sync": "CLEAR",
         "head": "e46ab010e04a06d059dd1273cf6ec80af1267fa3",
         "human_qa": {
-          "notes": "Trigger melanggar fact-immutable sales (SJ_IMMUTABLE_FACT); fix: hapus backfill shift_id, relasi via cash_transactions.reference_id.",
-          "status": "PROBLEM",
-          "timestamp": "2026-09-14T11:18:46.773524+00:00"
+          "notes": "P4-A backend lolos: verify hijau, migration live, uji 014 perilaku capture tunai + expected cash OK, QA visual regresi shift normal.",
+          "status": "CLEAR",
+          "timestamp": "2026-09-14T11:22:28.097960+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-P3-UI-604ea3b0/package.zip",
         "remote_lease": "ACTIVE",
@@ -321,9 +321,9 @@
       "milestone": "CS-05-P3-UI",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-05-P3-UI-604ea3b0",
-      "stage": "HUMAN_QA",
+      "stage": "READY_TO_LOCK",
       "state_version": 1,
-      "updated_at": "2026-09-14T11:19:15.292604+00:00"
+      "updated_at": "2026-09-14T11:22:28.098346+00:00"
     },
     {
       "created_at": "2026-09-14T10:43:10.262610+00:00",
