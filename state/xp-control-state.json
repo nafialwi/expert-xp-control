@@ -246,7 +246,7 @@
     {
       "created_at": "2026-09-14T05:19:53.977722+00:00",
       "metadata": {
-        "_last_stage": "HUMAN_QA",
+        "_last_stage": "READY_TO_LOCK",
         "base_fingerprint": "127fd1f6234c1939b69e185ada3d54bde0fc644e87aaa1e71ba0d4e36a4600f8",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -256,6 +256,11 @@
         ],
         "control_sync": "CLEAR",
         "head": "28852c7ea853142716243a1442d922d697bbed30",
+        "human_qa": {
+          "notes": "QA manusia clear melalui menu XP",
+          "status": "CLEAR",
+          "timestamp": "2026-09-14T05:25:39.618173+00:00"
+        },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-P3-API-2afa70f2/package.zip",
         "remote_lease": "ACTIVE",
         "remote_safepoint": "CLEAR",
@@ -268,9 +273,9 @@
       "milestone": "CS-05-P3-API",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-05-P3-API-2afa70f2",
-      "stage": "HUMAN_QA",
+      "stage": "READY_TO_LOCK",
       "state_version": 1,
-      "updated_at": "2026-09-14T05:20:22.646867+00:00"
+      "updated_at": "2026-09-14T05:25:39.618580+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
