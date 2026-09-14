@@ -357,10 +357,13 @@
     {
       "created_at": "2026-09-14T09:52:09.116119+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "4790c418a2e8d4b2a5b4c56a45c644e522d8301401b63e897e064758a2829492",
         "branch": "work/cs06743-patch3-hardening",
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-blocked",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-blocked/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "f1b03384b05873d3f807c4d976c83746f1decae4",
         "head": "f1b03384b05873d3f807c4d976c83746f1decae4",
         "human_qa": {
           "notes": "QA visual 5 langkah lolos dikonfirmasi owner; verify hijau 68 tests + build OK.",
@@ -373,15 +376,16 @@
         "resolved_incident_id": "INC-AB3D2675",
         "safepoint_head": "f1b03384b05873d3f807c4d976c83746f1decae4",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-blocked/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "4790c418a2e8d4b2a5b4c56a45c644e522d8301401b63e897e064758a2829492"
       },
       "milestone": "CS-05-P3-UI-REMEDIATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-blocked",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-14T10:08:04.872664+00:00"
+      "updated_at": "2026-09-14T10:08:30.127256+00:00"
     }
   ]
 }
