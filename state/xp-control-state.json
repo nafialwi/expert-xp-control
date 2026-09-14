@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-14T07:10:33.305156+00:00",
+        "last_active_at": "2026-09-14T09:52:04.949126+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -355,27 +355,24 @@
       "updated_at": "2026-09-13T10:56:43.476417+00:00"
     },
     {
-      "created_at": "2026-09-14T07:10:38.098525+00:00",
+      "created_at": "2026-09-14T09:52:09.116119+00:00",
       "metadata": {
         "_last_stage": "WAITING_GPT",
-        "control_sync": "CLEAR",
-        "failure_message": "Human QA tidak valid dari state WAITING_GPT.",
-        "incident_challenge": "6fb89857c708897472a835fefa24cfd4",
-        "incident_id": "INC-A8084226",
-        "remote_safepoint": "CLEAR",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
-        "resolved_incident_id": "INC-44BE1062",
-        "safepoint_head": "f1b03384b05873d3f807c4d976c83746f1decae4",
-        "safepoint_pushed": true,
-        "warning_status": "KNOWN",
-        "working_fingerprint": "d9278efe5564d31e56e5b586ebea8afd527204b72e6c22276e9de79b3bd9beb0"
+        "base_fingerprint": "4790c418a2e8d4b2a5b4c56a45c644e522d8301401b63e897e064758a2829492",
+        "branch": "work/cs06743-patch3-hardening",
+        "failure_message": "Paket XP tidak cocok dengan kondisi project.",
+        "head": "f1b03384b05873d3f807c4d976c83746f1decae4",
+        "incident_challenge": "90b12a6159ed221feb27a05870472560",
+        "incident_id": "INC-AB3D2675",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-blocked/package.zip",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
       },
-      "milestone": null,
+      "milestone": "CS-05-P3-UI-REMEDIATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-blocked",
       "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-14T09:48:50.696369+00:00"
+      "updated_at": "2026-09-14T09:52:09.129161+00:00"
     }
   ]
 }
