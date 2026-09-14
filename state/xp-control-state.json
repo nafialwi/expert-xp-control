@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-14T10:43:06.496055+00:00",
+        "last_active_at": "2026-09-14T11:44:16.316362+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -361,7 +361,25 @@
       "run_id": "segeran-jiwa-pos-next-CS-05-P4-A-CASH-INTEGRATION-a9115d5d",
       "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-14T11:26:58.401643+00:00"
+      "updated_at": "2026-09-14T11:27:02.119838+00:00"
+    },
+    {
+      "created_at": "2026-09-14T11:44:22.477541+00:00",
+      "metadata": {
+        "_last_stage": "PACKAGE_VALIDATED",
+        "base_fingerprint": "a97ac46a7a24373e7642e41c6249bed4ad1b440527c221110b9bba59838f767f",
+        "branch": "work/cs06743-patch3-hardening",
+        "head": "a91c563308df2230197cf4337ec191bf30c83577",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-P4-B-UI-RECONCILIATION-47ec983b/package.zip",
+        "remote_lease": "ACTIVE",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": "CS-05-P4-B-UI-RECONCILIATION",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-05-P4-B-UI-RECONCILIATION-47ec983b",
+      "stage": "PACKAGE_VALIDATED",
+      "state_version": 1,
+      "updated_at": "2026-09-14T11:44:26.446153+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
