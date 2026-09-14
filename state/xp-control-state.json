@@ -320,22 +320,26 @@
     {
       "created_at": "2026-09-14T10:43:10.262610+00:00",
       "metadata": {
-        "_last_stage": "WAITING_GPT",
+        "_last_stage": "HUMAN_QA",
         "base_fingerprint": "4790c418a2e8d4b2a5b4c56a45c644e522d8301401b63e897e064758a2829492",
         "branch": "work/cs06743-patch3-hardening",
-        "failure_message": "Paket XP tidak cocok dengan kondisi project.",
+        "control_sync": "CLEAR",
         "head": "f1b03384b05873d3f807c4d976c83746f1decae4",
-        "incident_challenge": "715ace249ce3c6c9f7721651a361bb4b",
-        "incident_id": "INC-8A619CED",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-05-P4-A-CASH-INTEGRATION-a9115d5d/package.zip",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "resolved_incident_id": "INC-8A619CED",
+        "safepoint_head": "f1b03384b05873d3f807c4d976c83746f1decae4",
+        "safepoint_pushed": true,
+        "warning_status": "KNOWN",
+        "working_fingerprint": "4790c418a2e8d4b2a5b4c56a45c644e522d8301401b63e897e064758a2829492"
       },
       "milestone": "CS-05-P4-A-CASH-INTEGRATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-05-P4-A-CASH-INTEGRATION-a9115d5d",
-      "stage": "WAITING_GPT",
+      "stage": "HUMAN_QA",
       "state_version": 1,
-      "updated_at": "2026-09-14T10:43:10.277144+00:00"
+      "updated_at": "2026-09-14T10:58:56.715242+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
