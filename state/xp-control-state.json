@@ -567,14 +567,17 @@
     {
       "created_at": "2026-09-15T11:12:45.575952+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "55cf68e5f14eac6007195ccfca4e04d60f3e739fbdfafa581404ffa5bc564167",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
           "supabase/migrations/20260915120000_cs06_p2b_inventory_balances.sql",
           "supabase/tests/cs06_p2b_inventory_balances_test.sql"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "9318360bd54fd431c59f0af1c769601bc942b985",
         "head": "b0a617efe654f8ce7404bc8d85586f4faee26814",
         "human_qa": {
           "notes": "CS-06-P2B-REVISED: migration dibatalkan jadi cancellation notice (no-op). Design conflict dengan CS-02 inventory_balances view. DB tidak berubah. P2B akan didesain ulang untuk integrasi products(P1) dengan stock_items(CS-02).",
@@ -582,20 +585,22 @@
           "timestamp": "2026-09-15T11:17:56.839841+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "safepoint_head": "9318360bd54fd431c59f0af1c769601bc942b985",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "c68c817c62cd2b0cd0c3f700d92f7f4be7e6d3d93ec2d72a06e50366f2ea1fae"
       },
       "milestone": "CS-06-P2B-REVISED",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T11:17:56.840076+00:00"
+      "updated_at": "2026-09-15T11:18:20.414224+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
