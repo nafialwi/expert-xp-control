@@ -489,10 +489,18 @@
     {
       "created_at": "2026-09-15T09:07:44.769302+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "WAITING_GPT",
         "base_fingerprint": "fef56c7e557a09c3a0a041ec6b6bab71091a0b31c172e6eb987cbd5445811f75",
         "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "supabase/migrations/20260915110000_cs06_p2a_rls_fix.sql",
+          "supabase/tests/cs06_p2a_rls_fix_test.sql"
+        ],
+        "control_sync": "CLEAR",
+        "failure_message": "Source verification gagal.",
         "head": "b7069296fe7854254f0956b07f1e87665e41f752",
+        "incident_challenge": "b545b05a39ff77dcc6b518de2b5408c7",
+        "incident_id": "INC-9ABD6A34",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763/package.zip",
         "remote_lease": "ACTIVE",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
@@ -500,9 +508,9 @@
       "milestone": "CS-06-P2A-RLS-FIX",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-15T09:07:48.738235+00:00"
+      "updated_at": "2026-09-15T09:08:06.520562+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
