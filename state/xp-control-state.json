@@ -722,20 +722,37 @@
     {
       "created_at": "2026-09-15T14:51:14.769135+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "HUMAN_QA",
         "base_fingerprint": "46227c5203c4dfcd9ac5614c1f9182cbe981e1ff09df74a6affbebf81ddd8010",
         "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "supabase/migrations/20260915210000_cs06_p4r1_grn_hardening.sql",
+          "supabase/tests/cs06_p4r1_grn_hardening_test.sql",
+          "tests/test_cs06_p4r1_grn_hardening.py",
+          "tests/test_cs02_migrations.py"
+        ],
+        "control_sync": "CLEAR",
+        "db_applied": true,
+        "db_verified": true,
         "head": "10eb06efdb4622cb2ef1ecaa628a1005959bcf9b",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P4R1-GRN-HARDENING-702d249c/package.zip",
         "remote_lease": "ACTIVE",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "safepoint_head": "ad4bcb31a779d943dce20777862a12115be51cc4",
+        "safepoint_pushed": true,
+        "transition_warnings": [
+          "DB_APPROVAL_REQUIRED->REMOTE_UNAVAILABLE"
+        ],
+        "warning_status": "KNOWN",
+        "working_fingerprint": "40a6507306b738574f005ebeec300599fd736731f44d58d2b0e26c35b2edcfa8"
       },
       "milestone": "CS-06-P4R1-GRN-HARDENING",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P4R1-GRN-HARDENING-702d249c",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "HUMAN_QA",
       "state_version": 1,
-      "updated_at": "2026-09-15T14:51:18.824262+00:00"
+      "updated_at": "2026-09-15T15:06:43.847341+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
