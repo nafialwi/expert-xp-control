@@ -528,7 +528,7 @@
     {
       "created_at": "2026-09-15T09:32:55.010572+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "84d166ead69c6a22cd5ce6d93d35d5536e229358bac95124283062add9c496a6",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -536,7 +536,10 @@
           "supabase/tests/cs06_p2b_inventory_balances_test.sql",
           "tests/test_cs02_migrations.py"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2B-INVENTORY-BALANCES-acced680",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2B-INVENTORY-BALANCES-acced680/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "b0a617efe654f8ce7404bc8d85586f4faee26814",
         "head": "09f4c310b218723ecb8aac6a010b00f0d7916b35",
         "human_qa": {
           "notes": "Design pivot: P2B asli konflik dengan CS-02 inventory_balances view. Akan direvisi di paket CS-06-P2B-REVISED.",
@@ -544,20 +547,22 @@
           "timestamp": "2026-09-15T11:01:06.972580+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P2B-INVENTORY-BALANCES-acced680/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "safepoint_head": "b0a617efe654f8ce7404bc8d85586f4faee26814",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2B-INVENTORY-BALANCES-acced680/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "c27f994542ec08984f72110d8e7ad93a1d653ede4dd55c71891887d8c988d4f4"
       },
       "milestone": "CS-06-P2B-INVENTORY-BALANCES",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P2B-INVENTORY-BALANCES-acced680",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T11:01:06.972801+00:00"
+      "updated_at": "2026-09-15T11:01:33.317164+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
