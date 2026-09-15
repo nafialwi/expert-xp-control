@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-15T03:32:25.121773+00:00",
+        "last_active_at": "2026-09-15T05:51:23.826758+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -431,7 +431,7 @@
       "run_id": "segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0",
       "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-15T03:32:55.900629+00:00"
+      "updated_at": "2026-09-15T03:32:58.455919+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
@@ -471,37 +471,20 @@
       "updated_at": "2026-09-13T10:56:43.476417+00:00"
     },
     {
-      "created_at": "2026-09-14T09:52:09.116119+00:00",
+      "created_at": "2026-09-15T05:51:30.169229+00:00",
       "metadata": {
-        "_last_stage": "LOCKED_REMOTE",
-        "base_fingerprint": "4790c418a2e8d4b2a5b4c56a45c644e522d8301401b63e897e064758a2829492",
-        "branch": "work/cs06743-patch3-hardening",
-        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-blocked",
-        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-blocked/CHECKPOINT.md",
-        "control_sync": "CLEAR",
-        "final_head": "f1b03384b05873d3f807c4d976c83746f1decae4",
-        "head": "f1b03384b05873d3f807c4d976c83746f1decae4",
-        "human_qa": {
-          "notes": "QA visual 5 langkah lolos dikonfirmasi owner; verify hijau 68 tests + build OK.",
-          "status": "CLEAR",
-          "timestamp": "2026-09-14T10:08:04.872365+00:00"
-        },
-        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-blocked/package.zip",
-        "remote_safepoint": "CLEAR",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
-        "resolved_incident_id": "INC-AB3D2675",
-        "safepoint_head": "f1b03384b05873d3f807c4d976c83746f1decae4",
-        "safepoint_pushed": true,
-        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-blocked/SOURCE.zip",
-        "warning_status": "KNOWN",
-        "working_fingerprint": "4790c418a2e8d4b2a5b4c56a45c644e522d8301401b63e897e064758a2829492"
+        "_last_stage": "WAITING_GPT",
+        "failure_message": "Project memiliki perubahan lokal sebelum pekerjaan dimulai; source tidak diubah.",
+        "incident_challenge": "1243ec2058090caaf0710f98708dd57b",
+        "incident_id": "INC-F70F1582",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
       },
-      "milestone": "CS-05-P3-UI-REMEDIATION",
+      "milestone": null,
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-blocked",
-      "stage": "LOCKED_REMOTE",
+      "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-14T10:08:33.010762+00:00"
+      "updated_at": "2026-09-15T05:51:30.172286+00:00"
     }
   ]
 }
