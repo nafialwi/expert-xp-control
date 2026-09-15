@@ -605,7 +605,7 @@
     {
       "created_at": "2026-09-15T11:47:55.338726+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "e18a3a9b0a2aab143eb20adf7d7de9e1bcfea301afdb90bc15d2f8b778d334cd",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -613,7 +613,10 @@
           "supabase/tests/cs06_p2c_migrate_to_stock_items_test.sql",
           "tests/test_cs02_migrations.py"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2C-MIGRATE-TO-STOCK-ITEMS-3a41898e",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2C-MIGRATE-TO-STOCK-ITEMS-3a41898e/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "c668ed16c24ad5fe2159d09c184fdf14672c55d7",
         "head": "9318360bd54fd431c59f0af1c769601bc942b985",
         "human_qa": {
           "notes": "CS-06-P2C: stock_items extended (base_unit_id), stock_item_units + stock_item_suppliers dibuat, products deprecated via comment. ADR-CS06-01 implemented.",
@@ -621,20 +624,22 @@
           "timestamp": "2026-09-15T11:50:27.335650+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P2C-MIGRATE-TO-STOCK-ITEMS-3a41898e/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "safepoint_head": "c668ed16c24ad5fe2159d09c184fdf14672c55d7",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2C-MIGRATE-TO-STOCK-ITEMS-3a41898e/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "ab3539f1df526c04f103a7c144ba1d3873972f2ab88a45c8b1a68f26f23bdc4b"
       },
       "milestone": "CS-06-P2C-MIGRATE-TO-STOCK-ITEMS",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P2C-MIGRATE-TO-STOCK-ITEMS-3a41898e",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T11:50:27.335908+00:00"
+      "updated_at": "2026-09-15T11:50:53.181918+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
