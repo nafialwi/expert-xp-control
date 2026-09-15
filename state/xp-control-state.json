@@ -410,10 +410,18 @@
     {
       "created_at": "2026-09-15T03:32:28.775410+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "WAITING_GPT",
         "base_fingerprint": "c88629a9c1b7eb49c2561371f2d5728a9e827f2c05028108bd51ee7ad58feebc",
         "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "supabase/migrations/20260915100000_cs06_p1_products_suppliers_units.sql",
+          "supabase/tests/cs06_p1_products_suppliers_units_test.sql"
+        ],
+        "control_sync": "CLEAR",
+        "failure_message": "Source verification gagal.",
         "head": "1c5e941c2ec8d7ac63aac274a7af5d13ac6c31c2",
+        "incident_challenge": "a7174aca12a3c53022435c07ca84559f",
+        "incident_id": "INC-849DB314",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0/package.zip",
         "remote_lease": "ACTIVE",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
@@ -421,9 +429,9 @@
       "milestone": "CS-06-P1-INVENTORY-FOUNDATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-15T03:32:32.311730+00:00"
+      "updated_at": "2026-09-15T03:32:55.900629+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
