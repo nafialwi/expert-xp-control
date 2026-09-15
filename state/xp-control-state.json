@@ -434,7 +434,7 @@
       "run_id": "segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0",
       "stage": "HUMAN_QA",
       "state_version": 1,
-      "updated_at": "2026-09-15T06:08:13.456945+00:00"
+      "updated_at": "2026-09-15T06:08:19.062651+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
@@ -476,8 +476,11 @@
     {
       "created_at": "2026-09-15T05:51:30.169229+00:00",
       "metadata": {
-        "_last_stage": "REMOTE_SAFEPOINT",
+        "_last_stage": "WAITING_GPT",
         "control_sync": "CLEAR",
+        "failure_message": "Human QA tidak valid dari state REMOTE_SAFEPOINT.",
+        "incident_challenge": "4b19d655d4b55402964602cd1b3c76e3",
+        "incident_id": "INC-92FFF666",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "resolved_incident_id": "INC-F70F1582",
@@ -489,9 +492,9 @@
       "milestone": null,
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-blocked",
-      "stage": "REMOTE_SAFEPOINT",
+      "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-15T06:07:19.825171+00:00"
+      "updated_at": "2026-09-15T06:08:19.349401+00:00"
     }
   ]
 }
