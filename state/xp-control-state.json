@@ -767,10 +767,22 @@
     {
       "created_at": "2026-09-15T16:31:03.741730+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "WAITING_GPT",
         "base_fingerprint": "96095aa4217aae120f7e8e529a8ebd9001db12b4aa7210638df53099370e9294",
         "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "docs/superpowers/specs/2026-09-15-cs-06-p5-bom-foundation-design.md",
+          "docs/superpowers/plans/2026-09-15-cs-06-p5-bom-foundation.md",
+          "supabase/migrations/20260915223000_cs06_p5_bom_foundation.sql",
+          "supabase/tests/cs06_p5_bom_foundation_test.sql",
+          "tests/test_cs06_p5_bom_foundation.py",
+          "tests/test_cs02_migrations.py"
+        ],
+        "control_sync": "CLEAR",
+        "failure_message": "Source verification gagal.",
         "head": "ad4bcb31a779d943dce20777862a12115be51cc4",
+        "incident_challenge": "6b561cdea2cf46435089ac19cef9b2ae",
+        "incident_id": "INC-A059F98B",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P5-BOM-FOUNDATION-8c0b9dc6/package.zip",
         "remote_lease": "ACTIVE",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
@@ -778,9 +790,9 @@
       "milestone": "CS-06-P5-BOM-FOUNDATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P5-BOM-FOUNDATION-8c0b9dc6",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-15T16:31:07.183796+00:00"
+      "updated_at": "2026-09-15T16:31:14.342164+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
