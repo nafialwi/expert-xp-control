@@ -683,7 +683,7 @@
     {
       "created_at": "2026-09-15T12:23:03.237241+00:00",
       "metadata": {
-        "_last_stage": "HUMAN_QA",
+        "_last_stage": "READY_TO_LOCK",
         "base_fingerprint": "c88e53b849ea3651c1a3b623d245bc454814ab354361fd6fb18e5640d5cdf301",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -693,6 +693,11 @@
         ],
         "control_sync": "CLEAR",
         "head": "755c81d3f034cea21862a2e84ed184556bbdc521",
+        "human_qa": {
+          "notes": "CS-06-P4: goods_receipts + lines + post_goods_receipt() function dibuat. Ledger posting atomic, otomatis update status PO.",
+          "status": "CLEAR",
+          "timestamp": "2026-09-15T12:25:58.116990+00:00"
+        },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P4-GOODS-RECEIPTS-f1f7062c/package.zip",
         "remote_lease": "ACTIVE",
         "remote_safepoint": "CLEAR",
@@ -705,9 +710,9 @@
       "milestone": "CS-06-P4-GOODS-RECEIPTS",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P4-GOODS-RECEIPTS-f1f7062c",
-      "stage": "HUMAN_QA",
+      "stage": "READY_TO_LOCK",
       "state_version": 1,
-      "updated_at": "2026-09-15T12:23:29.847412+00:00"
+      "updated_at": "2026-09-15T12:25:58.117227+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
