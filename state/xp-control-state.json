@@ -410,14 +410,17 @@
     {
       "created_at": "2026-09-15T03:32:28.775410+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "c88629a9c1b7eb49c2561371f2d5728a9e827f2c05028108bd51ee7ad58feebc",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
           "supabase/migrations/20260915100000_cs06_p1_products_suppliers_units.sql",
           "supabase/tests/cs06_p1_products_suppliers_units_test.sql"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "1c5e941c2ec8d7ac63aac274a7af5d13ac6c31c2",
         "head": "1c5e941c2ec8d7ac63aac274a7af5d13ac6c31c2",
         "human_qa": {
           "notes": "QA CS-06-P1: migration 5 tabel (units, suppliers, products, product_units, product_suppliers) + test existence siap apply ke DB live.",
@@ -425,21 +428,23 @@
           "timestamp": "2026-09-15T06:21:51.013272+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "resolved_incident_id": "INC-849DB314",
         "safepoint_head": "1c5e941c2ec8d7ac63aac274a7af5d13ac6c31c2",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "c88629a9c1b7eb49c2561371f2d5728a9e827f2c05028108bd51ee7ad58feebc"
       },
       "milestone": "CS-06-P1-INVENTORY-FOUNDATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T06:21:51.013538+00:00"
+      "updated_at": "2026-09-15T06:22:20.687770+00:00"
     },
     {
       "created_at": "2026-09-15T06:08:36.187734+00:00",
