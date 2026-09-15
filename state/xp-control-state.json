@@ -489,14 +489,17 @@
     {
       "created_at": "2026-09-15T09:07:44.769302+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "fef56c7e557a09c3a0a041ec6b6bab71091a0b31c172e6eb987cbd5445811f75",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
           "supabase/migrations/20260915110000_cs06_p2a_rls_fix.sql",
           "supabase/tests/cs06_p2a_rls_fix_test.sql"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "09f4c310b218723ecb8aac6a010b00f0d7916b35",
         "head": "b7069296fe7854254f0956b07f1e87665e41f752",
         "human_qa": {
           "notes": "CS-06-P2A RLS Fix: 5 policy di-drop+create ulang pakai get_my_authority() helper (konsisten CS-05), verify lokal hijau, DB production ter-apply (DROP 5 + CREATE 5).",
@@ -504,21 +507,23 @@
           "timestamp": "2026-09-15T09:22:52.153120+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "resolved_incident_id": "INC-9ABD6A34",
         "safepoint_head": "09f4c310b218723ecb8aac6a010b00f0d7916b35",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "199366434b501982cf4d36be2acd328e1052eb4997b73677ff1a509385f4678a"
       },
       "milestone": "CS-06-P2A-RLS-FIX",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T09:22:52.153474+00:00"
+      "updated_at": "2026-09-15T09:23:24.087669+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
