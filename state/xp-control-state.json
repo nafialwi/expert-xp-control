@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-15T06:08:30.258724+00:00",
+        "last_active_at": "2026-09-15T06:45:30.194324+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -444,7 +444,7 @@
       "run_id": "segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0",
       "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T06:22:20.687770+00:00"
+      "updated_at": "2026-09-15T06:22:23.440354+00:00"
     },
     {
       "created_at": "2026-09-15T06:08:36.187734+00:00",
@@ -466,6 +466,26 @@
       "stage": "WAITING_GPT",
       "state_version": 1,
       "updated_at": "2026-09-15T06:08:41.792631+00:00"
+    },
+    {
+      "created_at": "2026-09-15T06:45:35.891966+00:00",
+      "metadata": {
+        "_last_stage": "WAITING_GPT",
+        "base_fingerprint": "c88629a9c1b7eb49c2561371f2d5728a9e827f2c05028108bd51ee7ad58feebc",
+        "branch": "work/cs06743-patch3-hardening",
+        "failure_message": "Paket XP tidak cocok dengan kondisi project.",
+        "head": "1c5e941c2ec8d7ac63aac274a7af5d13ac6c31c2",
+        "incident_challenge": "f7705655ddfa121176e5c37f78ed39dd",
+        "incident_id": "INC-006FAAEC",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P1-REGISTRY-SYNC-8e78788f/package.zip",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": "CS-06-P1-REGISTRY-SYNC",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-06-P1-REGISTRY-SYNC-8e78788f",
+      "stage": "WAITING_GPT",
+      "state_version": 1,
+      "updated_at": "2026-09-15T06:45:35.922095+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
