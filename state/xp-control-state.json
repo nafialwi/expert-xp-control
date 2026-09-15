@@ -478,7 +478,7 @@
       "metadata": {
         "_last_stage": "WAITING_GPT",
         "control_sync": "CLEAR",
-        "failure_message": "Human QA tidak valid dari state REMOTE_SAFEPOINT.",
+        "failure_message": "Final Lock tidak valid dari state WAITING_GPT.",
         "incident_challenge": "4b19d655d4b55402964602cd1b3c76e3",
         "incident_id": "INC-92FFF666",
         "remote_safepoint": "CLEAR",
@@ -494,7 +494,7 @@
       "run_id": "segeran-jiwa-pos-next-blocked",
       "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-15T06:08:19.349401+00:00"
+      "updated_at": "2026-09-15T06:08:24.371858+00:00"
     }
   ]
 }
