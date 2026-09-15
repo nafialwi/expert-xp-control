@@ -644,7 +644,7 @@
     {
       "created_at": "2026-09-15T12:03:41.364063+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "d89b47254270872dbff3f064f784717061f1a63f4cd26b749557020f0bcc0bf1",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -652,7 +652,10 @@
           "supabase/tests/cs06_p3_purchase_orders_test.sql",
           "tests/test_cs02_migrations.py"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P3-PURCHASE-ORDERS-63c74429",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P3-PURCHASE-ORDERS-63c74429/CHECKPOINT.md",
         "control_sync": "CLEAR",
+        "final_head": "755c81d3f034cea21862a2e84ed184556bbdc521",
         "head": "c668ed16c24ad5fe2159d09c184fdf14672c55d7",
         "human_qa": {
           "notes": "CS-06-P3: purchase_orders + purchase_order_lines dibuat. PO tidak mengubah stok (sesuai arsitektur GPT). Status flow: DRAFT-SUBMITTED-APPROVED-PARTIALLY_RECEIVED-RECEIVED-CANCELLED.",
@@ -660,20 +663,22 @@
           "timestamp": "2026-09-15T12:11:31.284820+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P3-PURCHASE-ORDERS-63c74429/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "safepoint_head": "755c81d3f034cea21862a2e84ed184556bbdc521",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P3-PURCHASE-ORDERS-63c74429/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "226494ebfead965a595df99282ddc4a6543c12a77cc3a5ed404d7a67a69d9801"
       },
       "milestone": "CS-06-P3-PURCHASE-ORDERS",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P3-PURCHASE-ORDERS-63c74429",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T12:11:31.285088+00:00"
+      "updated_at": "2026-09-15T12:12:01.644848+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
