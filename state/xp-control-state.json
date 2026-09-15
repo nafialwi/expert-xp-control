@@ -410,7 +410,7 @@
     {
       "created_at": "2026-09-15T03:32:28.775410+00:00",
       "metadata": {
-        "_last_stage": "HUMAN_QA",
+        "_last_stage": "READY_TO_LOCK",
         "base_fingerprint": "c88629a9c1b7eb49c2561371f2d5728a9e827f2c05028108bd51ee7ad58feebc",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -419,6 +419,11 @@
         ],
         "control_sync": "CLEAR",
         "head": "1c5e941c2ec8d7ac63aac274a7af5d13ac6c31c2",
+        "human_qa": {
+          "notes": "QA CS-06-P1: migration 5 tabel (units, suppliers, products, product_units, product_suppliers) + test existence siap apply ke DB live.",
+          "status": "CLEAR",
+          "timestamp": "2026-09-15T06:21:51.013272+00:00"
+        },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0/package.zip",
         "remote_lease": "ACTIVE",
         "remote_safepoint": "CLEAR",
@@ -432,9 +437,9 @@
       "milestone": "CS-06-P1-INVENTORY-FOUNDATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P1-INVENTORY-FOUNDATION-19e004f0",
-      "stage": "HUMAN_QA",
+      "stage": "READY_TO_LOCK",
       "state_version": 1,
-      "updated_at": "2026-09-15T06:08:19.062651+00:00"
+      "updated_at": "2026-09-15T06:21:51.013538+00:00"
     },
     {
       "created_at": "2026-09-15T06:08:36.187734+00:00",
@@ -442,6 +447,7 @@
         "_last_stage": "WAITING_GPT",
         "base_fingerprint": "c88629a9c1b7eb49c2561371f2d5728a9e827f2c05028108bd51ee7ad58feebc",
         "branch": "work/cs06743-patch3-hardening",
+        "control_sync": "CLEAR",
         "failure_message": "Paket XP tidak cocok dengan kondisi project.",
         "head": "1c5e941c2ec8d7ac63aac274a7af5d13ac6c31c2",
         "incident_challenge": "3e1352e459b16db4ddc2869c9d215db9",
@@ -454,7 +460,7 @@
       "run_id": "segeran-jiwa-pos-next-CS-06-P1-PRODUCTS-SUPPLIERS-UNITS-38c21363",
       "stage": "WAITING_GPT",
       "state_version": 1,
-      "updated_at": "2026-09-15T06:08:36.240466+00:00"
+      "updated_at": "2026-09-15T06:08:41.792631+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
