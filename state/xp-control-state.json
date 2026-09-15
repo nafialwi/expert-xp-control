@@ -489,7 +489,7 @@
     {
       "created_at": "2026-09-15T09:07:44.769302+00:00",
       "metadata": {
-        "_last_stage": "HUMAN_QA",
+        "_last_stage": "READY_TO_LOCK",
         "base_fingerprint": "fef56c7e557a09c3a0a041ec6b6bab71091a0b31c172e6eb987cbd5445811f75",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -498,6 +498,11 @@
         ],
         "control_sync": "CLEAR",
         "head": "b7069296fe7854254f0956b07f1e87665e41f752",
+        "human_qa": {
+          "notes": "CS-06-P2A RLS Fix: 5 policy di-drop+create ulang pakai get_my_authority() helper (konsisten CS-05), verify lokal hijau, DB production ter-apply (DROP 5 + CREATE 5).",
+          "status": "CLEAR",
+          "timestamp": "2026-09-15T09:22:52.153120+00:00"
+        },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763/package.zip",
         "remote_lease": "ACTIVE",
         "remote_safepoint": "CLEAR",
@@ -511,9 +516,9 @@
       "milestone": "CS-06-P2A-RLS-FIX",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P2A-RLS-FIX-d1cbc763",
-      "stage": "HUMAN_QA",
+      "stage": "READY_TO_LOCK",
       "state_version": 1,
-      "updated_at": "2026-09-15T09:16:00.518305+00:00"
+      "updated_at": "2026-09-15T09:22:52.153474+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
