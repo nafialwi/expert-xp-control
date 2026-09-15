@@ -722,7 +722,7 @@
     {
       "created_at": "2026-09-15T14:51:14.769135+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "46227c5203c4dfcd9ac5614c1f9182cbe981e1ff09df74a6affbebf81ddd8010",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -731,9 +731,12 @@
           "tests/test_cs06_p4r1_grn_hardening.py",
           "tests/test_cs02_migrations.py"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P4R1-GRN-HARDENING-702d249c",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P4R1-GRN-HARDENING-702d249c/CHECKPOINT.md",
         "control_sync": "CLEAR",
         "db_applied": true,
         "db_verified": true,
+        "final_head": "ad4bcb31a779d943dce20777862a12115be51cc4",
         "head": "10eb06efdb4622cb2ef1ecaa628a1005959bcf9b",
         "human_qa": {
           "notes": "QA manusia clear melalui menu XP",
@@ -741,11 +744,13 @@
           "timestamp": "2026-09-15T15:12:11.833890+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P4R1-GRN-HARDENING-702d249c/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "safepoint_head": "ad4bcb31a779d943dce20777862a12115be51cc4",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P4R1-GRN-HARDENING-702d249c/SOURCE.zip",
         "transition_warnings": [
           "DB_APPROVAL_REQUIRED->REMOTE_UNAVAILABLE"
         ],
@@ -755,9 +760,9 @@
       "milestone": "CS-06-P4R1-GRN-HARDENING",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P4R1-GRN-HARDENING-702d249c",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T15:12:11.834345+00:00"
+      "updated_at": "2026-09-15T15:13:16.695312+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
