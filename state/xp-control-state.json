@@ -567,20 +567,30 @@
     {
       "created_at": "2026-09-15T11:12:45.575952+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "HUMAN_QA",
         "base_fingerprint": "55cf68e5f14eac6007195ccfca4e04d60f3e739fbdfafa581404ffa5bc564167",
         "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "supabase/migrations/20260915120000_cs06_p2b_inventory_balances.sql",
+          "supabase/tests/cs06_p2b_inventory_balances_test.sql"
+        ],
+        "control_sync": "CLEAR",
         "head": "b0a617efe654f8ce7404bc8d85586f4faee26814",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6/package.zip",
         "remote_lease": "ACTIVE",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "safepoint_head": "9318360bd54fd431c59f0af1c769601bc942b985",
+        "safepoint_pushed": true,
+        "warning_status": "KNOWN",
+        "working_fingerprint": "c68c817c62cd2b0cd0c3f700d92f7f4be7e6d3d93ec2d72a06e50366f2ea1fae"
       },
       "milestone": "CS-06-P2B-REVISED",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "HUMAN_QA",
       "state_version": 1,
-      "updated_at": "2026-09-15T11:12:48.892343+00:00"
+      "updated_at": "2026-09-15T11:13:11.675748+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
