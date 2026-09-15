@@ -449,7 +449,7 @@
     {
       "created_at": "2026-09-15T07:01:09.557367+00:00",
       "metadata": {
-        "_last_stage": "WAITING_GPT",
+        "_last_stage": "HUMAN_QA",
         "base_fingerprint": "c88629a9c1b7eb49c2561371f2d5728a9e827f2c05028108bd51ee7ad58feebc",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -458,20 +458,23 @@
           "tests/test_cs02_migrations.py"
         ],
         "control_sync": "CLEAR",
-        "failure_message": "Source verification gagal.",
         "head": "1c5e941c2ec8d7ac63aac274a7af5d13ac6c31c2",
-        "incident_challenge": "df6a8cdbbc0cab2ca822bb7351eb7296",
-        "incident_id": "INC-3F14DC5A",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P1-REGISTRY-SYNC-f3675aab/package.zip",
         "remote_lease": "ACTIVE",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "resolved_incident_id": "INC-3F14DC5A",
+        "safepoint_head": "b7069296fe7854254f0956b07f1e87665e41f752",
+        "safepoint_pushed": true,
+        "warning_status": "KNOWN",
+        "working_fingerprint": "4fe879339a8b7fa51f55616fe7e35596a14ff6cdc02597c46a0734ca65343937"
       },
       "milestone": "CS-06-P1-REGISTRY-SYNC",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P1-REGISTRY-SYNC-f3675aab",
-      "stage": "WAITING_GPT",
+      "stage": "HUMAN_QA",
       "state_version": 1,
-      "updated_at": "2026-09-15T07:01:34.774415+00:00"
+      "updated_at": "2026-09-15T07:41:12.296926+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
