@@ -567,7 +567,7 @@
     {
       "created_at": "2026-09-15T11:12:45.575952+00:00",
       "metadata": {
-        "_last_stage": "HUMAN_QA",
+        "_last_stage": "READY_TO_LOCK",
         "base_fingerprint": "55cf68e5f14eac6007195ccfca4e04d60f3e739fbdfafa581404ffa5bc564167",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -576,6 +576,11 @@
         ],
         "control_sync": "CLEAR",
         "head": "b0a617efe654f8ce7404bc8d85586f4faee26814",
+        "human_qa": {
+          "notes": "CS-06-P2B-REVISED: migration dibatalkan jadi cancellation notice (no-op). Design conflict dengan CS-02 inventory_balances view. DB tidak berubah. P2B akan didesain ulang untuk integrasi products(P1) dengan stock_items(CS-02).",
+          "status": "CLEAR",
+          "timestamp": "2026-09-15T11:17:56.839841+00:00"
+        },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6/package.zip",
         "remote_lease": "ACTIVE",
         "remote_safepoint": "CLEAR",
@@ -588,9 +593,9 @@
       "milestone": "CS-06-P2B-REVISED",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P2B-REVISED-db4785c6",
-      "stage": "HUMAN_QA",
+      "stage": "READY_TO_LOCK",
       "state_version": 1,
-      "updated_at": "2026-09-15T11:13:11.675748+00:00"
+      "updated_at": "2026-09-15T11:17:56.840076+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
