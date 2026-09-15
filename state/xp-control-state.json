@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-15T12:03:37.395039+00:00",
+        "last_active_at": "2026-09-15T12:22:59.471622+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -678,7 +678,25 @@
       "run_id": "segeran-jiwa-pos-next-CS-06-P3-PURCHASE-ORDERS-63c74429",
       "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-15T12:12:01.644848+00:00"
+      "updated_at": "2026-09-15T12:12:04.185445+00:00"
+    },
+    {
+      "created_at": "2026-09-15T12:23:03.237241+00:00",
+      "metadata": {
+        "_last_stage": "PACKAGE_VALIDATED",
+        "base_fingerprint": "c88e53b849ea3651c1a3b623d245bc454814ab354361fd6fb18e5640d5cdf301",
+        "branch": "work/cs06743-patch3-hardening",
+        "head": "755c81d3f034cea21862a2e84ed184556bbdc521",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P4-GOODS-RECEIPTS-f1f7062c/package.zip",
+        "remote_lease": "ACTIVE",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": "CS-06-P4-GOODS-RECEIPTS",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-06-P4-GOODS-RECEIPTS-f1f7062c",
+      "stage": "PACKAGE_VALIDATED",
+      "state_version": 1,
+      "updated_at": "2026-09-15T12:23:06.657345+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
