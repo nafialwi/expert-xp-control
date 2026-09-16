@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-15T16:31:00.150144+00:00",
+        "last_active_at": "2026-09-16T07:11:20.449988+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -811,7 +811,25 @@
       "run_id": "segeran-jiwa-pos-next-CS-06-P5-BOM-FOUNDATION-8c0b9dc6",
       "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-16T00:54:15.132349+00:00"
+      "updated_at": "2026-09-16T00:54:17.655265+00:00"
+    },
+    {
+      "created_at": "2026-09-16T07:11:24.421398+00:00",
+      "metadata": {
+        "_last_stage": "PACKAGE_VALIDATED",
+        "base_fingerprint": "c4c6e897f83f1ae39115d5e8e3555b1c64fe747e22642a4cf89f1175550b93bb",
+        "branch": "work/cs06743-patch3-hardening",
+        "head": "ac4ab8dea67fd466cd8f90d27a0fe7b64fdb57fd",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P6-PRODUCTION-EXECUTION-7cfa6bb2/package.zip",
+        "remote_lease": "ACTIVE",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": "CS-06-P6-PRODUCTION-EXECUTION",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-06-P6-PRODUCTION-EXECUTION-7cfa6bb2",
+      "stage": "PACKAGE_VALIDATED",
+      "state_version": 1,
+      "updated_at": "2026-09-16T07:11:28.296023+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
