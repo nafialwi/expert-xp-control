@@ -767,7 +767,7 @@
     {
       "created_at": "2026-09-15T16:31:03.741730+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "96095aa4217aae120f7e8e529a8ebd9001db12b4aa7210638df53099370e9294",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -778,9 +778,12 @@
           "tests/test_cs06_p5_bom_foundation.py",
           "tests/test_cs02_migrations.py"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P5-BOM-FOUNDATION-8c0b9dc6",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P5-BOM-FOUNDATION-8c0b9dc6/CHECKPOINT.md",
         "control_sync": "CLEAR",
         "db_applied": true,
         "db_verified": true,
+        "final_head": "ac4ab8dea67fd466cd8f90d27a0fe7b64fdb57fd",
         "head": "ad4bcb31a779d943dce20777862a12115be51cc4",
         "human_qa": {
           "notes": "QA manusia clear melalui menu XP",
@@ -788,12 +791,14 @@
           "timestamp": "2026-09-16T00:53:27.194000+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P5-BOM-FOUNDATION-8c0b9dc6/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "resolved_incident_id": "INC-0C2628EA",
         "safepoint_head": "ac4ab8dea67fd466cd8f90d27a0fe7b64fdb57fd",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P5-BOM-FOUNDATION-8c0b9dc6/SOURCE.zip",
         "transition_warnings": [
           "DB_APPROVAL_REQUIRED->REMOTE_UNAVAILABLE",
           "DB_APPROVAL_REQUIRED->REMOTE_UNAVAILABLE"
@@ -804,9 +809,9 @@
       "milestone": "CS-06-P5-BOM-FOUNDATION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P5-BOM-FOUNDATION-8c0b9dc6",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-16T00:53:27.195060+00:00"
+      "updated_at": "2026-09-16T00:54:15.132349+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
