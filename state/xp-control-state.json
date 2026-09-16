@@ -816,20 +816,36 @@
     {
       "created_at": "2026-09-16T07:11:24.421398+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "HUMAN_QA",
         "base_fingerprint": "c4c6e897f83f1ae39115d5e8e3555b1c64fe747e22642a4cf89f1175550b93bb",
         "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "docs/superpowers/specs/2026-09-16-cs-06-p6-production-execution-design.md",
+          "docs/superpowers/plans/2026-09-16-cs-06-p6-production-execution.md",
+          "supabase/migrations/20260916083000_cs06_p6_production_execution.sql",
+          "supabase/tests/cs06_p6_production_execution_test.sql",
+          "tests/test_cs06_p6_production_execution.py",
+          "tests/test_cs02_migrations.py"
+        ],
+        "control_sync": "CLEAR",
+        "db_applied": true,
+        "db_verified": true,
         "head": "ac4ab8dea67fd466cd8f90d27a0fe7b64fdb57fd",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P6-PRODUCTION-EXECUTION-7cfa6bb2/package.zip",
         "remote_lease": "ACTIVE",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "safepoint_head": "778fbad0a7099e98eff683cdb45bb55231a23338",
+        "safepoint_pushed": true,
+        "warning_status": "KNOWN",
+        "working_fingerprint": "d1a657085396113deb73e07ea90efe8233d8f6d22cdc6ea92d7a55030c09509a"
       },
       "milestone": "CS-06-P6-PRODUCTION-EXECUTION",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P6-PRODUCTION-EXECUTION-7cfa6bb2",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "HUMAN_QA",
       "state_version": 1,
-      "updated_at": "2026-09-16T07:11:28.296023+00:00"
+      "updated_at": "2026-09-16T07:13:10.777032+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
