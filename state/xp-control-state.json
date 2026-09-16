@@ -860,7 +860,7 @@
     {
       "created_at": "2026-09-16T09:46:57.269641+00:00",
       "metadata": {
-        "_last_stage": "READY_TO_LOCK",
+        "_last_stage": "LOCKED_REMOTE",
         "base_fingerprint": "81b22fa92c87e13d0107a86fd8c42974b5fce88a37d7721fa0ab50f18aef5d5b",
         "branch": "work/cs06743-patch3-hardening",
         "changed_paths": [
@@ -871,9 +871,12 @@
           "tests/test_cs06_p7_restock_transfer.py",
           "tests/test_cs02_migrations.py"
         ],
+        "checkpoint_dir": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P7-RESTOCK-TRANSFER-bb0716c2",
+        "checkpoint_report": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P7-RESTOCK-TRANSFER-bb0716c2/CHECKPOINT.md",
         "control_sync": "CLEAR",
         "db_applied": true,
         "db_verified": true,
+        "final_head": "6d06bb4aabd5113aad7b65205c2c077af75fd662",
         "head": "778fbad0a7099e98eff683cdb45bb55231a23338",
         "human_qa": {
           "notes": "QA manusia clear melalui menu XP",
@@ -881,20 +884,22 @@
           "timestamp": "2026-09-16T09:48:46.559024+00:00"
         },
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P7-RESTOCK-TRANSFER-bb0716c2/package.zip",
-        "remote_lease": "ACTIVE",
+        "remote_lease": "RELEASED",
+        "remote_lease_release": "CLEAR",
         "remote_safepoint": "CLEAR",
         "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
         "safepoint_head": "6d06bb4aabd5113aad7b65205c2c077af75fd662",
         "safepoint_pushed": true,
+        "source_archive": "/data/data/com.termux/files/home/.expert-workstation/checkpoints/segeran-jiwa-pos-next/segeran-jiwa-pos-next-CS-06-P7-RESTOCK-TRANSFER-bb0716c2/SOURCE.zip",
         "warning_status": "KNOWN",
         "working_fingerprint": "dd2c6703eacb9be2e66c05125c87c96e8cdbcae6656021dec1f72b8e574da13f"
       },
       "milestone": "CS-06-P7-RESTOCK-TRANSFER",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P7-RESTOCK-TRANSFER-bb0716c2",
-      "stage": "READY_TO_LOCK",
+      "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-16T09:48:46.560045+00:00"
+      "updated_at": "2026-09-16T09:50:32.674748+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
