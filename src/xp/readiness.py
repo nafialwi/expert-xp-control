@@ -217,3 +217,23 @@ def audit_project_readiness(repo: Path, *, home: Path | None = None):
     """Additive XP+ project-level readiness API; legacy workstation audit is unchanged."""
     from .project_doctor import ProjectDoctor
     return ProjectDoctor(home).inspect(repo)
+
+
+
+_CAPABILITY_STATE_LABELS = {
+    CapabilityState.AVAILABLE: "Tersedia",
+    CapabilityState.NEEDS_ATTENTION: "Perlu perhatian",
+    CapabilityState.UNAVAILABLE: "Tidak tersedia",
+    CapabilityState.NOT_CHECKED: "Belum diperiksa",
+}
+
+
+def capability_state_label(
+    state: CapabilityState,
+) -> str:
+    try:
+        return _CAPABILITY_STATE_LABELS[state]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported capability state: {state}"
+        ) from exc
