@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .adapters.git import GitAdapter
 from .adapters.postgresql import PostgreSQLAdapter
+from .capabilities import CapabilitySnapshot, CapabilityState
 from .config import XPConfig
 from .project_registry import ProjectRegistry, load_project_profile
 
@@ -25,6 +26,32 @@ class ReadinessReport:
     overall: str  # READY | READY_WITH_LIMITATIONS | NOT_READY
     project_name: str | None
     checks: tuple[ReadinessCheck, ...]
+
+
+_CAPABILITY_LEVEL_MAP = {
+    CapabilityState.AVAILABLE: "CLEAR",
+    CapabilityState.NEEDS_ATTENTION: "WARNING",
+    CapabilityState.UNAVAILABLE: "BLOCKER",
+    CapabilityState.NOT_CHECKED: "INFO",
+}
+
+
+def capability_snapshot_to_check(
+    snapshot: CapabilitySnapshot,
+) -> ReadinessCheck:
+    """Render one AF-03 canonical snapshot as legacy readiness output."""
+
+    code_name = "".join(
+        char if char.isalnum() else "_"
+        for char in snapshot.capability_id.upper()
+    ).strip("_")
+
+    return ReadinessCheck(
+        code=f"CAPABILITY_{code_name}",
+        level=_CAPABILITY_LEVEL_MAP[snapshot.state],
+        title=snapshot.capability_id,
+        detail=snapshot.detail,
+    )
 
 
 def _add(checks: list[ReadinessCheck], code: str, level: str, title: str, detail: str) -> None:
@@ -190,3 +217,23 @@ def audit_project_readiness(repo: Path, *, home: Path | None = None):
     """Additive XP+ project-level readiness API; legacy workstation audit is unchanged."""
     from .project_doctor import ProjectDoctor
     return ProjectDoctor(home).inspect(repo)
+
+
+
+_CAPABILITY_STATE_LABELS = {
+    CapabilityState.AVAILABLE: "Tersedia",
+    CapabilityState.NEEDS_ATTENTION: "Perlu perhatian",
+    CapabilityState.UNAVAILABLE: "Tidak tersedia",
+    CapabilityState.NOT_CHECKED: "Belum diperiksa",
+}
+
+
+def capability_state_label(
+    state: CapabilityState,
+) -> str:
+    try:
+        return _CAPABILITY_STATE_LABELS[state]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported capability state: {state}"
+        ) from exc

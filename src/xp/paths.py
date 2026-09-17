@@ -15,6 +15,7 @@ class XPPaths:
     packages: Path
     versions: Path
     checkpoints: Path
+    activity: Path
     config: Path
 
     @classmethod
@@ -33,6 +34,7 @@ class XPPaths:
             packages=root / "packages",
             versions=root / "versions",
             checkpoints=root / "checkpoints",
+            activity=root / "activity",
             config=root / "config",
         )
 
@@ -48,6 +50,7 @@ class XPPaths:
             self.packages,
             self.versions,
             self.checkpoints,
+            self.activity,
             self.config,
         ):
             path.mkdir(parents=True, exist_ok=True)

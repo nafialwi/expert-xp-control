@@ -1490,7 +1490,23 @@ def build_parser() -> argparse.ArgumentParser:
     proj_onboard.add_argument("--approve", action="store_true")
     proj_onboard.add_argument("--verify-script")
     sub.add_parser("upgrade", help="Upgrade XP")
-    sub.add_parser("check", help="Cek dependency")
+    check = sub.add_parser(
+        "check",
+        help="Cek dependency dan capability",
+    )
+    check.add_argument(
+        "--live",
+        action="store_true",
+        help="Jalankan Live Check secara eksplisit",
+    )
+    activity = sub.add_parser(
+        "activity",
+        help="Tampilkan Jejak Aktivitas job",
+    )
+    activity.add_argument(
+        "job_id",
+        help="Job ID",
+    )
     sub.add_parser("sweep", help="Sweep folder Download untuk file XP")
     sub.add_parser("handshake", help="Print panduan sambung untuk AI external")
     parser_help = sub.add_parser("help", help="Tampilkan bantuan")
@@ -1607,7 +1623,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "upgrade":
         return _upgrade_cmd()
     if args.command == "check":
-        return _check_cmd()
+        return _check_cmd(live=args.live)
+    if args.command == "activity":
+        return _activity_cmd(args.job_id)
     if args.command == "pkg-build":
         return _pkg_build(args.repo, args.spec, args.out)
     if args.command == "lease-release":
@@ -2029,21 +2047,212 @@ def _upgrade_cmd() -> int:
         print(f"Upgrade ke {new_version} selesai dan tervalidasi")
         print(f"Rollback origin: {promotion.previous_version or '-'}")
         return 0
-def _check_cmd() -> int:
-    import subprocess, shutil
+def _provenance_mode_label(provenance) -> str:
+    if provenance.live:
+        return "LIVE"
+
+    if (
+        str(provenance.source or "")
+        .strip()
+        .lower()
+        == "ai-knowledge"
+    ):
+        return "AI KNOWLEDGE"
+
+    return "LOCAL"
+
+
+def _activity_status_label(status) -> str:
+    from .activity import ActivityStatus
+
+    labels = {
+        ActivityStatus.STARTED: "Dimulai",
+        ActivityStatus.COMPLETED: "Selesai",
+        ActivityStatus.FAILED: "Gagal",
+        ActivityStatus.NEEDS_ATTENTION:
+            "Perlu perhatian",
+    }
+
+    return labels[status]
+
+
+def _render_capability_snapshot(snapshot) -> None:
+    from .readiness import capability_state_label
+
+    mode = "LIVE" if snapshot.live else "LOCAL"
+
+    print(
+        f"{snapshot.capability_id}: "
+        f"{capability_state_label(snapshot.state)} "
+        f"[{mode}]"
+    )
+
+    if snapshot.checked_at is not None:
+        print(
+            "  Terakhir diperiksa: "
+            f"{snapshot.checked_at.isoformat()}"
+        )
+
+    if snapshot.detail:
+        print(f"  Detail: {snapshot.detail}")
+
+
+def _build_live_check_service():
+    """Build configured probes only after explicit --live."""
+
+    from datetime import datetime, timezone
+
+    from .ai.gateway import AIGateway
+    from .ai.settings import AISettings
+    from .capabilities import (
+        CapabilityRegistry,
+        LiveCheckService,
+    )
+
+    settings = AISettings.for_home(_home())
+    gateway = AIGateway(settings)
+
+    probe = gateway.live_readiness_probe()
+
+    return LiveCheckService(
+        CapabilityRegistry(),
+        probes=(probe,),
+        now=lambda: datetime.now(timezone.utc),
+    )
+
+
+def _activity_cmd(job_id: str) -> int:
+    from .activity import ActivityStore
+
+    store = ActivityStore.for_home(_home())
+    events = store.list_for_job(job_id)
+
+    if not events:
+        print(
+            "Jejak Aktivitas tidak ditemukan "
+            f"untuk job: {job_id}"
+        )
+        return 2
+
+    print(f"=== Jejak Aktivitas: {job_id} ===")
+
+    for item in events:
+        print()
+        print(
+            f"{item.timestamp.isoformat()} | "
+            f"{_activity_status_label(item.status)}"
+        )
+        print(f"Aksi      : {item.action}")
+        print(
+            "Mode      : "
+            f"{_provenance_mode_label(item.provenance)}"
+        )
+        print(
+            "Source    : "
+            f"{item.provenance.source or '-'}"
+        )
+        print(
+            "Processor : "
+            f"{item.provenance.processor or '-'}"
+        )
+        print(
+            "Via       : "
+            f"{item.provenance.via or '-'}"
+        )
+        print(
+            "Hasil     : "
+            f"{item.result_summary}"
+        )
+
+    return 0
+
+
+def _check_cmd(*, live: bool = False) -> int:
+    import shutil
+    import subprocess
+
+    from .capabilities import CapabilityState
+
     print("=== Dependency Check ===")
-    for name, cmd in [("python", "python3"), ("node", "node"), ("git", "git"), ("psql", "psql"), ("gh", "gh")]:
+
+    for name, cmd in [
+        ("python", "python3"),
+        ("node", "node"),
+        ("git", "git"),
+        ("psql", "psql"),
+        ("gh", "gh"),
+    ]:
         if shutil.which(cmd):
-            result = subprocess.run([cmd, "--version"], capture_output=True, text=True)
-            version = (result.stdout.strip() or result.stderr.strip()).split("\n")[0]
+            result = subprocess.run(
+                [cmd, "--version"],
+                capture_output=True,
+                text=True,
+            )
+            version = (
+                result.stdout.strip()
+                or result.stderr.strip()
+            ).split("\\n")[0]
+
             print(f"OK {name}: {version}")
         else:
-            print(f"MISSING {name}: tidak ditemukan")
+            print(
+                f"MISSING {name}: tidak ditemukan"
+            )
+
     if shutil.which("gh"):
         print("=== GitHub CLI ===")
-        result = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
-        print("OK gh auth: logged in" if result.returncode == 0 else "MISSING gh auth: belum login")
-    return 0
+
+        result = subprocess.run(
+            ["gh", "auth", "status"],
+            capture_output=True,
+            text=True,
+        )
+
+        print(
+            "OK gh auth: logged in"
+            if result.returncode == 0
+            else "MISSING gh auth: belum login"
+        )
+
+    print("=== Capability Transparency ===")
+
+    if not live:
+        print("Mode: LOCAL/OFFLINE")
+        print("Live Check: Belum diperiksa")
+        return 0
+
+    print("Mode: LIVE (explicit)")
+
+    try:
+        service = _build_live_check_service()
+        snapshots = service.run_explicit()
+    except Exception as exc:
+        print("Live Check: Perlu perhatian")
+        print(
+            "Detail: Live Check tidak dapat "
+            f"disiapkan ({type(exc).__name__})"
+        )
+        return 2
+
+    if not snapshots:
+        print(
+            "Live Check: Perlu perhatian"
+        )
+        print(
+            "Detail: tidak ada live probe "
+            "yang dikonfigurasi"
+        )
+        return 2
+
+    result_code = 0
+
+    for snapshot in snapshots:
+        _render_capability_snapshot(snapshot)
+
+        if snapshot.state is not CapabilityState.AVAILABLE:
+            result_code = 2
+
+    return result_code
 
 if __name__ == "__main__":
     raise SystemExit(main())
