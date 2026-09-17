@@ -50,6 +50,53 @@ class AIGateway:
         transport = self._transport_for(route)
         return transport.readiness(route)
 
+
+    def live_readiness_probe(
+        self,
+        route_id: str | None = None,
+    ):
+        """Build an explicit AF-03 readiness probe for one AI route.
+
+        This calls the existing transport readiness boundary only.
+        It never sends a completion request and never changes route.
+        """
+
+        from ..capabilities import (
+            CapabilitySnapshot,
+            CapabilityState,
+            LiveProbe,
+        )
+
+        route = self.route(route_id)
+        capability_id = f"ai:{route.route_id}"
+
+        def run() -> CapabilitySnapshot:
+            report = self.readiness(route.route_id)
+
+            state = (
+                CapabilityState.AVAILABLE
+                if report.ready
+                else CapabilityState.NEEDS_ATTENTION
+            )
+
+            return CapabilitySnapshot(
+                capability_id=capability_id,
+                state=state,
+                detail=report.detail,
+                metadata={
+                    "route_id": route.route_id,
+                    "model": route.model,
+                    "transport": route.transport,
+                    "readiness_status": report.status,
+                },
+            )
+
+        return LiveProbe(
+            capability_id=capability_id,
+            run=run,
+        )
+
+
     def complete(
         self,
         request: AIRequest,
