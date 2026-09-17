@@ -269,3 +269,111 @@ class ActivityStoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ActivityObjectiveMetadataTests(unittest.TestCase):
+    def test_test_result_metadata_round_trips_exact_counts(self):
+        from xp.activity import test_result_metadata
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "activity"
+            store = ActivityStore(root)
+
+            event = ActivityEvent(
+                event_id="task6-test-counts",
+                job_id="task6-job",
+                timestamp=datetime(
+                    2026, 9, 17, 15, 0,
+                    tzinfo=timezone.utc,
+                ),
+                category=ActivityCategory.TEST,
+                action="Run verification tests",
+                provenance=Provenance(
+                    source="test-runner",
+                    processor=None,
+                    via="unittest",
+                    live=False,
+                ),
+                status=ActivityStatus.COMPLETED,
+                result_summary="Verification completed",
+                metadata=test_result_metadata(
+                    passed=38,
+                    failed=0,
+                    skipped=1,
+                ),
+            )
+
+            store.append(event)
+
+            restored = ActivityStore(root).list_for_job(
+                "task6-job"
+            )
+
+            self.assertEqual(len(restored), 1)
+            self.assertEqual(
+                restored[0].metadata,
+                {
+                    "passed": 38,
+                    "failed": 0,
+                    "skipped": 1,
+                },
+            )
+
+    def test_source_result_metadata_round_trips_source_count(self):
+        from xp.activity import source_result_metadata
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "activity"
+            store = ActivityStore(root)
+
+            event = ActivityEvent(
+                event_id="task6-source-count",
+                job_id="task6-source-job",
+                timestamp=datetime(
+                    2026, 9, 17, 15, 1,
+                    tzinfo=timezone.utc,
+                ),
+                category=ActivityCategory.LIVE_WEB,
+                action="Read sources",
+                provenance=Provenance(
+                    source="web",
+                    processor=None,
+                    via="search",
+                    live=True,
+                ),
+                status=ActivityStatus.COMPLETED,
+                result_summary="Sources read",
+                metadata=source_result_metadata(
+                    source_count=4
+                ),
+            )
+
+            store.append(event)
+
+            restored = ActivityStore(root).list_for_job(
+                "task6-source-job"
+            )
+
+            self.assertEqual(len(restored), 1)
+            self.assertEqual(
+                restored[0].metadata,
+                {"source_count": 4},
+            )
+
+    def test_objective_metadata_rejects_negative_counts(self):
+        from xp.activity import (
+            source_result_metadata,
+            test_result_metadata,
+        )
+
+        with self.assertRaises(ValueError):
+            test_result_metadata(
+                passed=-1,
+                failed=0,
+                skipped=0,
+            )
+
+        with self.assertRaises(ValueError):
+            source_result_metadata(
+                source_count=-1
+            )

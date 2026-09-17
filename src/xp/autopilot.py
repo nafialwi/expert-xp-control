@@ -184,93 +184,307 @@ class AutopilotController:
         self._sync_control_state(state)
         return AutopilotResult(outcome, "WAITING_GPT", message, state.run_id, handoff)
 
-    def _verify_source(self, repo: Path, policy: dict[str, Any]) -> tuple[bool, str, str, tuple[str, ...]]:
+    def _verify_source(
+        self,
+        repo: Path,
+        policy: dict[str, Any],
+        *,
+        job_id: str | None = None,
+    ) -> tuple[
+        bool,
+        str,
+        str,
+        tuple[str, ...],
+    ]:
+        from datetime import datetime, timezone
+
+        from .activity import (
+            ActivityCategory,
+            ActivityEvent,
+            ActivityStatus,
+            ActivityStore,
+            Provenance,
+            test_result_metadata,
+        )
         from .redaction import redact_text
 
-        steps = list(policy.get("source_verify") or [])
+        steps = list(
+            policy.get("source_verify") or []
+        )
+
+        # No verification command actually ran.
+        # Therefore no Activity event is fabricated.
         if not steps:
-            return True, "No source verification steps declared", "CLEAR", ()
+            return (
+                True,
+                "No source verification steps declared",
+                "CLEAR",
+                (),
+            )
+
+        passed = 0
+        failed = 0
+        total = len(steps)
+
+        def finish(
+            *,
+            ok: bool,
+            log: str,
+            warning_status: str,
+            unknown: tuple[str, ...],
+            activity_status: ActivityStatus,
+        ):
+            if job_id is not None:
+                skipped = max(
+                    0,
+                    total - passed - failed,
+                )
+
+                ActivityStore.for_home(
+                    self.user_home
+                ).append(
+                    ActivityEvent(
+                        event_id=(
+                            "source-verify-"
+                            + secrets.token_hex(8)
+                        ),
+                        job_id=job_id,
+                        timestamp=datetime.now(
+                            timezone.utc
+                        ),
+                        category=ActivityCategory.TEST,
+                        action="Source verification",
+                        provenance=Provenance(
+                            source="project-source",
+                            processor=None,
+                            via="autopilot-source-verify",
+                            live=False,
+                        ),
+                        status=activity_status,
+                        result_summary=(
+                            "Source verification: "
+                            f"{passed} passed, "
+                            f"{failed} failed, "
+                            f"{skipped} skipped"
+                        ),
+                        metadata=test_result_metadata(
+                            passed=passed,
+                            failed=failed,
+                            skipped=skipped,
+                        ),
+                    )
+                )
+
+            return (
+                ok,
+                log,
+                warning_status,
+                unknown,
+            )
 
         logs: list[str] = []
         generic = None
+
         for step in steps:
             adapter = step.get("adapter")
+
             try:
-                before_fp = GitAdapter(repo).working_fingerprint()
+                before_fp = GitAdapter(
+                    repo
+                ).working_fingerprint()
 
                 if adapter == "python":
-                    module = str(step.get("module", "unittest"))
-                    runner = PythonAdapter(repo, allowed_modules={module})
-                    timeout = int(step.get("timeout", 1800))
+                    module = str(
+                        step.get(
+                            "module",
+                            "unittest",
+                        )
+                    )
+
+                    runner = PythonAdapter(
+                        repo,
+                        allowed_modules={module},
+                    )
+
+                    timeout = int(
+                        step.get(
+                            "timeout",
+                            1800,
+                        )
+                    )
+
                     if not 1 <= timeout <= 3600:
                         raise ValueError(
-                            "verify timeout must be 1..3600 seconds"
+                            "verify timeout must be "
+                            "1..3600 seconds"
                         )
+
                     result = runner.run_module(
                         module,
-                        [str(x) for x in step.get("args", [])],
+                        [
+                            str(x)
+                            for x in step.get(
+                                "args",
+                                [],
+                            )
+                        ],
                         timeout=timeout,
                     )
+
                 elif adapter == "node":
                     runner = NodeAdapter(repo)
-                    timeout = int(step.get("timeout", 1800))
+
+                    timeout = int(
+                        step.get(
+                            "timeout",
+                            1800,
+                        )
+                    )
+
                     if not 1 <= timeout <= 3600:
                         raise ValueError(
-                            "verify timeout must be 1..3600 seconds"
+                            "verify timeout must be "
+                            "1..3600 seconds"
                         )
+
                     result = runner.run_script(
                         str(step["script"]),
                         timeout=timeout,
                     )
+
                 elif adapter == "generic":
                     if generic is None:
-                        generic = GenericToolchainAdapter(
-                            repo,
-                            policy.get("toolchain_commands") or {},
+                        generic = (
+                            GenericToolchainAdapter(
+                                repo,
+                                policy.get(
+                                    "toolchain_commands"
+                                )
+                                or {},
+                            )
                         )
-                    command_id = str(step.get("command") or "").strip()
-                    result = generic.run(command_id)
-                else:
-                    return (
-                        False,
-                        f"Unsupported verify adapter: {adapter}",
-                        "ERROR",
-                        (),
+
+                    command_id = str(
+                        step.get("command")
+                        or ""
+                    ).strip()
+
+                    result = generic.run(
+                        command_id
                     )
 
-                stdout = redact_text(result.stdout or "")
-                stderr = redact_text(result.stderr or "")
-                logs.extend([stdout, stderr])
+                else:
+                    failed += 1
 
-                after_fp = GitAdapter(repo).working_fingerprint()
+                    return finish(
+                        ok=False,
+                        log=(
+                            "Unsupported verify "
+                            f"adapter: {adapter}"
+                        ),
+                        warning_status="ERROR",
+                        unknown=(),
+                        activity_status=(
+                            ActivityStatus.FAILED
+                        ),
+                    )
+
+                stdout = redact_text(
+                    result.stdout or ""
+                )
+                stderr = redact_text(
+                    result.stderr or ""
+                )
+
+                logs.extend(
+                    [stdout, stderr]
+                )
+
+                after_fp = GitAdapter(
+                    repo
+                ).working_fingerprint()
+
                 if before_fp != after_fp:
-                    return (
-                        False,
-                        "\n".join(logs)
-                        + "\nVerification command mutated source outside the approved package.",
-                        "ERROR",
-                        (),
+                    failed += 1
+
+                    return finish(
+                        ok=False,
+                        log=(
+                            "\n".join(logs)
+                            + "\nVerification command "
+                            "mutated source outside the "
+                            "approved package."
+                        ),
+                        warning_status="ERROR",
+                        unknown=(),
+                        activity_status=(
+                            ActivityStatus.FAILED
+                        ),
                     )
 
                 if result.returncode != 0:
-                    return False, "\n".join(logs), "ERROR", ()
+                    failed += 1
+
+                    return finish(
+                        ok=False,
+                        log="\n".join(logs),
+                        warning_status="ERROR",
+                        unknown=(),
+                        activity_status=(
+                            ActivityStatus.FAILED
+                        ),
+                    )
+
+                passed += 1
+
             except Exception as exc:
-                return (
-                    False,
-                    "Source verification tidak selesai: "
-                    + redact_text(str(exc)),
-                    "ERROR",
-                    (),
+                failed += 1
+
+                return finish(
+                    ok=False,
+                    log=(
+                        "Source verification "
+                        "tidak selesai: "
+                        + redact_text(str(exc))
+                    ),
+                    warning_status="ERROR",
+                    unknown=(),
+                    activity_status=(
+                        ActivityStatus.FAILED
+                    ),
                 )
 
         log_text = "\n".join(logs)
-        warning_policy = dict(policy.get("warnings") or {})
+
+        warning_policy = dict(
+            policy.get("warnings") or {}
+        )
+
         warning_result = classify_warnings(
             log_text,
-            known_markers=list(warning_policy.get("known") or []),
-            detect_markers=list(warning_policy.get("detect") or []),
+            known_markers=list(
+                warning_policy.get("known")
+                or []
+            ),
+            detect_markers=list(
+                warning_policy.get("detect")
+                or []
+            ),
         )
-        return True, log_text, warning_result.status, warning_result.unknown
+
+        activity_status = (
+            ActivityStatus.COMPLETED
+            if warning_result.status == "CLEAR"
+            else ActivityStatus.NEEDS_ATTENTION
+        )
+
+        return finish(
+            ok=True,
+            log=log_text,
+            warning_status=warning_result.status,
+            unknown=warning_result.unknown,
+            activity_status=activity_status,
+        )
 
     def _store_package(self, package_path: Path, run_id: str) -> Path:
         run_dir = self.paths.runs / run_id
@@ -441,7 +655,7 @@ class AutopilotController:
 
             verify_entry = journal.before("SOURCE_VERIFY", {})
             with Spinner("Verifikasi source (gate kanonik) berjalan — layar TIDAK hang"):
-                ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy)
+                ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy, job_id=state.run_id)
             journal.after(verify_entry, "CLEAR" if ok else "ERROR", {"warning_status": warning_status})
             if not ok:
                 diff = git._run("diff", "--binary", "HEAD", "--", check=False)
@@ -609,7 +823,7 @@ class AutopilotController:
             journal.after(entry, "CLEAR", {"changed_paths": result.changed_paths})
             verify_entry = journal.before("SOURCE_VERIFY", {"after_remediation": True})
             with Spinner("Verifikasi source setelah remediation — layar TIDAK hang"):
-                ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy)
+                ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy, job_id=state.run_id)
             journal.after(verify_entry, "CLEAR" if ok else "ERROR", {"warning_status": warning_status})
             if not ok:
                 return self._failure_handoff(repo, profile, state, "Verification setelah remediation masih gagal.", {"verify_log": verify_log, "git_diff": git._run("diff", "--binary", "HEAD", "--", check=False)})
@@ -711,7 +925,7 @@ class AutopilotController:
                 )
 
         with Spinner("Final verification berjalan — layar TIDAK hang"):
-            ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy)
+            ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy, job_id=state.run_id)
         if not ok:
             return self._failure_handoff(repo, profile, state, "Final verification gagal sebelum lock.", {"verify_log": verify_log})
         if warning_status == "WARNING":
@@ -818,7 +1032,7 @@ class AutopilotController:
             operation = decision.operation
             if operation == "SOURCE_VERIFY":
                 with Spinner("Verifikasi source (recovery) berjalan"):
-                    ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy)
+                    ok, verify_log, warning_status, unknown_warnings = self._verify_source(repo, policy, job_id=state.run_id)
                 if interrupted:
                     journal.after(
                         str(interrupted["entry_id"]),
@@ -922,4 +1136,3 @@ class AutopilotController:
             state,
             f"State {state.stage} tidak memiliki jalur resume otomatis yang aman.",
         )
-

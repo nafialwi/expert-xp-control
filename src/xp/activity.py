@@ -309,3 +309,60 @@ class ActivityStore:
             ) from exc
 
         return tuple(events)
+
+
+def _objective_count(
+    name: str,
+    value: int,
+) -> int:
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+    ):
+        raise ValueError(
+            f"{name} must be a non-negative integer"
+        )
+
+    return value
+
+
+def test_result_metadata(
+    *,
+    passed: int,
+    failed: int,
+    skipped: int = 0,
+) -> dict[str, int]:
+    """Return already-known objective test counts.
+
+    This helper never parses logs or model reasoning.
+    """
+
+    return {
+        "passed": _objective_count(
+            "passed",
+            passed,
+        ),
+        "failed": _objective_count(
+            "failed",
+            failed,
+        ),
+        "skipped": _objective_count(
+            "skipped",
+            skipped,
+        ),
+    }
+
+
+def source_result_metadata(
+    *,
+    source_count: int,
+) -> dict[str, int]:
+    """Return an already-known objective source count."""
+
+    return {
+        "source_count": _objective_count(
+            "source_count",
+            source_count,
+        ),
+    }
