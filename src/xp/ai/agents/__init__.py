@@ -103,3 +103,21 @@ __all__ = [
     "decode_ai_response",
     "encode_agent_request",
 ]
+
+
+from .default_wiring import (
+    LocalAgentWiring,
+    build_default_zero_cost_wiring,
+    build_local_agent_wiring,
+)
+
+try:
+    __all__
+except NameError:
+    __all__ = []
+__all__ = [
+    *__all__,
+    "LocalAgentWiring",
+    "build_default_zero_cost_wiring",
+    "build_local_agent_wiring",
+]
