@@ -145,3 +145,19 @@ __all__ = [
     "urllib_loopback_get",
     "utc_now",
 ]
+
+
+from .live_wiring import (
+    build_default_zero_cost_live_wiring,
+    build_live_local_agent_wiring,
+)
+
+try:
+    __all__
+except NameError:
+    __all__ = []
+__all__ = [
+    *__all__,
+    "build_default_zero_cost_live_wiring",
+    "build_live_local_agent_wiring",
+]
