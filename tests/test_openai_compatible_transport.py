@@ -191,6 +191,10 @@ class OpenAICompatibleTransportTests(unittest.TestCase):
             response.model,
             "gemini/gemini-3.5-flash-lite",
         )
+        self.assertEqual(
+            response.served_model,
+            "gemini/gemini-3.5-flash-lite",
+        )
         self.assertEqual(response.text, "checking")
         self.assertEqual(response.finish_reason, "tool_calls")
         self.assertEqual(len(response.tool_calls), 1)
@@ -233,11 +237,12 @@ class OpenAICompatibleTransportTests(unittest.TestCase):
         )
 
         self.assertEqual(response.model, self._route().model)
+        self.assertIsNone(response.served_model)
         self.assertEqual(response.text, "")
         self.assertEqual(response.tool_calls, ())
-        self.assertEqual(response.usage.input_tokens, 0)
-        self.assertEqual(response.usage.output_tokens, 0)
-        self.assertEqual(response.usage.total_tokens, 0)
+        self.assertIsNone(response.usage.input_tokens)
+        self.assertIsNone(response.usage.output_tokens)
+        self.assertIsNone(response.usage.total_tokens)
 
     def test_tools_are_omitted_when_request_has_none(self):
         module = self._module()

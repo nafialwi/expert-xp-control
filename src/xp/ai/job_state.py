@@ -32,12 +32,21 @@ class ModelSwitch:
 
 
 @dataclass(frozen=True)
+class ModelMismatch:
+    route_id: str
+    configured_model: str
+    served_model: str
+    observed_at: str
+
+
+@dataclass(frozen=True)
 class JobAIState:
     job_id: str
     active_route_id: str | None = None
     active_model: str | None = None
     approved_unknown: UnknownCostApproval | None = None
     switches: tuple[ModelSwitch, ...] = ()
+    pending_model_mismatch: ModelMismatch | None = None
     completed: bool = False
 
 
@@ -131,6 +140,18 @@ class JobAIStateStore:
                 )
             )
 
+        mismatch_raw = raw.get("pending_model_mismatch")
+        mismatch = None
+        if mismatch_raw is not None:
+            if not isinstance(mismatch_raw, Mapping):
+                raise JobAIStateError("Persisted model mismatch is invalid")
+            mismatch = ModelMismatch(
+                route_id=str(mismatch_raw.get("route_id") or ""),
+                configured_model=str(mismatch_raw.get("configured_model") or ""),
+                served_model=str(mismatch_raw.get("served_model") or ""),
+                observed_at=str(mismatch_raw.get("observed_at") or ""),
+            )
+
         return JobAIState(
             job_id=job_id,
             active_route_id=(
@@ -145,6 +166,7 @@ class JobAIStateStore:
             ),
             approved_unknown=approval,
             switches=tuple(switches),
+            pending_model_mismatch=mismatch,
             completed=bool(raw.get("completed", False)),
         )
 
@@ -270,7 +292,41 @@ class JobAIStateStore:
             active_model=new_model,
             approved_unknown=None,
             switches=current.switches + (switch,),
+            pending_model_mismatch=None,
         )
+        self.save(state)
+        return state
+
+    def record_model_mismatch(
+        self,
+        job_id: str,
+        *,
+        route_id: str,
+        configured_model: str,
+        served_model: str,
+    ) -> JobAIState:
+        current = self.get(job_id)
+        if current.completed:
+            raise JobAIStateError("Completed job cannot record model mismatch")
+        state = replace(
+            current,
+            pending_model_mismatch=ModelMismatch(
+                route_id=route_id,
+                configured_model=configured_model,
+                served_model=served_model,
+                observed_at=_now_iso(),
+            ),
+        )
+        self.save(state)
+        return state
+
+    def has_pending_model_mismatch(self, job_id: str) -> bool:
+        state = self.get(job_id)
+        return bool(not state.completed and state.pending_model_mismatch is not None)
+
+    def acknowledge_model_mismatch(self, job_id: str) -> JobAIState:
+        current = self.get(job_id)
+        state = replace(current, pending_model_mismatch=None)
         self.save(state)
         return state
 
@@ -279,6 +335,7 @@ class JobAIStateStore:
         state = replace(
             current,
             approved_unknown=None,
+            pending_model_mismatch=None,
             completed=True,
         )
         self.save(state)

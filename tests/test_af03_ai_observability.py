@@ -77,6 +77,7 @@ class FakeTransport(AITransport):
                 total_tokens=8,
             ),
             finish_reason="stop",
+            served_model=self.returned_model,
         )
 
 
@@ -154,7 +155,7 @@ class AIGatewayObservabilityTests(unittest.TestCase):
 
         self.assertIs(
             item.status,
-            ActivityStatus.COMPLETED,
+            ActivityStatus.NEEDS_ATTENTION,
         )
         self.assertEqual(item.job_id, "JOB-AI-001")
         self.assertEqual(
@@ -178,6 +179,20 @@ class AIGatewayObservabilityTests(unittest.TestCase):
         self.assertEqual(
             item.metadata["transport"],
             "primary-transport",
+        )
+        self.assertEqual(
+            item.metadata["configured_model"],
+            "configured-model",
+        )
+        self.assertEqual(
+            item.metadata["served_model"],
+            "provider-actual-model",
+        )
+
+        capability = registry.get("ai:primary")
+        self.assertIs(
+            capability.state,
+            CapabilityState.NEEDS_ATTENTION,
         )
 
         rendered = repr(item)
