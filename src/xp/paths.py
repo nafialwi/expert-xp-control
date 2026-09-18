@@ -54,3 +54,8 @@ class XPPaths:
             self.config,
         ):
             path.mkdir(parents=True, exist_ok=True)
+
+def ai_state_root(home: Path) -> Path:
+    """Return the local AF-04 AI state directory for a user home."""
+    root = Path(home).expanduser().resolve()
+    return root / ".expert-workstation" / "state" / "ai"
