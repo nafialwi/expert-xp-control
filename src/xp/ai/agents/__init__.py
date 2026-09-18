@@ -83,3 +83,23 @@ __all__ = [
     "RequestEncoder",
     "ResponseDecoder",
 ]
+
+
+from .contract_mapping import (
+    AgentAIContractMappingError,
+    decode_ai_readiness,
+    decode_ai_response,
+    encode_agent_request,
+)
+
+try:
+    __all__
+except NameError:
+    __all__ = []
+__all__ = [
+    *__all__,
+    "AgentAIContractMappingError",
+    "decode_ai_readiness",
+    "decode_ai_response",
+    "encode_agent_request",
+]
