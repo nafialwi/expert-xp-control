@@ -45,3 +45,21 @@ __all__ = [
     "local_backend_ids",
     "resolve_local_backend",
 ]
+
+
+from .gateway_bridge import (
+    GatewayPort,
+    GatewayRuntimeBridge,
+    build_gateway_runtime,
+)
+
+try:
+    __all__
+except NameError:
+    __all__ = []
+__all__ = [
+    *__all__,
+    "GatewayPort",
+    "GatewayRuntimeBridge",
+    "build_gateway_runtime",
+]
