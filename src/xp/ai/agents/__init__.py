@@ -161,3 +161,19 @@ __all__ = [
     "build_default_zero_cost_live_wiring",
     "build_live_local_agent_wiring",
 ]
+
+
+from .live_smoke import (
+    LiveSmokeResult,
+    run_guarded_live_smoke,
+)
+
+try:
+    __all__
+except NameError:
+    __all__ = []
+__all__ = [
+    *__all__,
+    "LiveSmokeResult",
+    "run_guarded_live_smoke",
+]
