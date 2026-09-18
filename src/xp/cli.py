@@ -1438,6 +1438,28 @@ def build_parser() -> argparse.ArgumentParser:
     onboard = sub.add_parser("onboard")
     onboard.add_argument("--repo", required=True)
     onboard.add_argument("package")
+    ai_usage = sub.add_parser(
+        "ai-usage",
+        help="Tampilkan riwayat penggunaan AI untuk satu job",
+    )
+    ai_usage.add_argument("job_id")
+    ai_usage.add_argument(
+        "--expand",
+        action="store_true",
+        help="Tampilkan detail penggunaan AI",
+    )
+
+    ai_recommend = sub.add_parser(
+        "ai-recommend",
+        help="Tampilkan rekomendasi model berbasis bukti lokal",
+    )
+    ai_recommend.add_argument("category")
+    ai_recommend.add_argument(
+        "--expand",
+        action="store_true",
+        help="Tampilkan bukti dan keterbatasan",
+    )
+
     handoff = sub.add_parser("handoff")
     handoff.add_argument("--repo", required=True)
     handoff.add_argument("--format", choices=["zip", "chat"], default="zip")
@@ -1544,6 +1566,18 @@ def main(argv: list[str] | None = None) -> int:
         return _register(args.repo)
     if args.command == "onboard":
         return _onboard(args.repo, args.package)
+    if args.command == "ai-usage":
+        return _ai_usage_cmd(
+            args.job_id,
+            expand=bool(args.expand),
+        )
+
+    if args.command == "ai-recommend":
+        return _ai_recommend_cmd(
+            args.category,
+            expand=bool(args.expand),
+        )
+
     if args.command == "handoff":
         return _make_handoff(args.repo, fmt=getattr(args, "format", "zip"))
     if args.command == "control-export":
@@ -2119,6 +2153,132 @@ def _build_live_check_service():
         probes=(probe,),
         now=lambda: datetime.now(timezone.utc),
     )
+
+
+# AF04 TASK9 BEGIN
+def _af04_task_category(value: str):
+    from xp.ai.task_feedback import (
+        TASK_CATEGORY_LABELS,
+        TaskCategory,
+    )
+
+    normalized = str(value).strip()
+    for category in TaskCategory:
+        if normalized == category.value:
+            return category
+        if normalized.casefold() == TASK_CATEGORY_LABELS[category].casefold():
+            return category
+
+    raise ValueError("Kategori AI tidak dikenal")
+
+
+def _ai_usage_cmd(job_id: str, *, expand: bool = False) -> int:
+    from pathlib import Path
+
+    from xp.ai.presentation import (
+        format_usage_compact,
+        format_usage_expanded,
+    )
+    from xp.ai.usage_history import UsageHistoryStore
+
+    records = tuple(
+        record
+        for record in UsageHistoryStore.for_home(Path.home()).list()
+        if record.job_id == job_id
+    )
+
+    if not records:
+        print(f"Tidak ada riwayat AI untuk job: {job_id}")
+        return 2
+
+    formatter = (
+        format_usage_expanded
+        if expand
+        else format_usage_compact
+    )
+
+    for index, record in enumerate(records):
+        if index:
+            print()
+        print(formatter(record))
+
+    return 0
+
+
+def _ai_recommend_cmd(
+    category_value: str,
+    *,
+    expand: bool = False,
+) -> int:
+    from pathlib import Path
+
+    from xp.ai.contracts import AISettingsError
+    from xp.ai.presentation import (
+        format_recommendation_compact,
+        format_recommendation_expanded,
+    )
+    from xp.ai.recommendation import (
+        RecommendationCandidate,
+        recommend,
+    )
+    from xp.ai.settings import AISettings
+    from xp.ai.task_feedback import TaskFeedbackStore
+    from xp.ai.usage_history import UsageHistoryStore
+    from xp.capabilities import CapabilityState
+
+    try:
+        category = _af04_task_category(category_value)
+    except ValueError:
+        print(f"Kategori AI tidak dikenal: {category_value}")
+        return 2
+
+    home = Path.home()
+
+    try:
+        settings = AISettings.for_home(home)
+    except AISettingsError as exc:
+        print(f"Konfigurasi AI tidak tersedia: {exc}")
+        return 2
+
+    usage = UsageHistoryStore.for_home(home).list()
+    feedback_store = TaskFeedbackStore.for_home(home)
+
+    feedback_by_job = {}
+    for record in usage:
+        if record.job_id is None:
+            continue
+        if record.job_id not in feedback_by_job:
+            feedback_by_job[record.job_id] = feedback_store.get(
+                record.job_id
+            )
+
+    candidates = tuple(
+        RecommendationCandidate(
+            route_id=route.route_id,
+            model=route.model,
+            cost_class=route.cost_class,
+            readiness=CapabilityState.NOT_CHECKED,
+            declared_capable=True,
+            tool_suitable=True,
+        )
+        for route in settings.routes.values()
+    )
+
+    report = recommend(
+        category,
+        candidates,
+        usage,
+        feedback_by_job,
+    )
+
+    formatter = (
+        format_recommendation_expanded
+        if expand
+        else format_recommendation_compact
+    )
+    print(formatter(report))
+    return 0
+# AF04 TASK9 END
 
 
 def _activity_cmd(job_id: str) -> int:

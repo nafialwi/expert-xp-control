@@ -52,14 +52,14 @@ class AIContractsTests(unittest.TestCase):
         self.assertEqual(request.tools, ())
         self.assertFalse(request.stream)
 
-    def test_ai_usage_defaults_to_zero(self):
+    def test_ai_usage_defaults_to_unavailable(self):
         usage_cls = self._require("AIUsage")
 
         usage = usage_cls()
 
-        self.assertEqual(usage.input_tokens, 0)
-        self.assertEqual(usage.output_tokens, 0)
-        self.assertEqual(usage.total_tokens, 0)
+        self.assertIsNone(usage.input_tokens)
+        self.assertIsNone(usage.output_tokens)
+        self.assertIsNone(usage.total_tokens)
 
     def test_ai_readiness_is_structured(self):
         readiness_cls = self._require("AIReadiness")

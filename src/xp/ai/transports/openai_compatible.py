@@ -210,9 +210,18 @@ class OpenAICompatibleTransport(AITransport):
             else None
         )
 
+        _af04_reported_model = raw.get("model")
+        served_model = (
+            _af04_reported_model.strip()
+            if isinstance(_af04_reported_model, str)
+            and _af04_reported_model.strip()
+            else None
+        )
+
         return AIResponse(
             route_id=route.route_id,
             model=model,
+            served_model=served_model,
             text=text,
             tool_calls=tool_calls,
             usage=usage,
@@ -289,13 +298,15 @@ class OpenAICompatibleTransport(AITransport):
         if not isinstance(raw, Mapping):
             return AIUsage()
 
-        def token_count(name: str) -> int:
-            value = raw.get(name, 0)
+        def token_count(name: str) -> int | None:
+            if name not in raw:
+                return None
+            value = raw.get(name)
             if isinstance(value, bool):
-                return 0
+                return None
             if isinstance(value, int) and value >= 0:
                 return value
-            return 0
+            return None
 
         return AIUsage(
             input_tokens=token_count("prompt_tokens"),

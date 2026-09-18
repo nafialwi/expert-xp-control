@@ -40,9 +40,9 @@ class AIRequest:
 
 @dataclass(frozen=True)
 class AIUsage:
-    input_tokens: int = 0
-    output_tokens: int = 0
-    total_tokens: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +60,7 @@ class AIResponse:
     tool_calls: tuple[AIToolCall, ...]
     usage: AIUsage
     finish_reason: str | None = None
+    served_model: str | None = None
 
 
 @dataclass(frozen=True)

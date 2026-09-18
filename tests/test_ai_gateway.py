@@ -225,7 +225,7 @@ class AIGatewayTests(unittest.TestCase):
         )
         self.assertEqual(paid.complete_calls, [])
 
-    def test_explicit_paid_route_is_used_only_when_requested(self):
+    def test_explicit_paid_route_is_blocked_by_af04_policy(self):
         module = self._module()
         free = FakeTransport("free-transport")
         paid = FakeTransport("paid-transport")
@@ -237,17 +237,18 @@ class AIGatewayTests(unittest.TestCase):
             },
         )
 
-        response = gateway.complete(
-            self._request(),
-            route_id="paid-backup",
-        )
+        with self.assertRaisesRegex(
+            module.AIPolicyBlockedError,
+            "Known paid routes are blocked",
+        ):
+            gateway.complete(
+                self._request(),
+                route_id="paid-backup",
+            )
 
-        self.assertEqual(response.route_id, "paid-backup")
         self.assertEqual(free.complete_calls, [])
-        self.assertEqual(
-            [route_id for route_id, _ in paid.complete_calls],
-            ["paid-backup"],
-        )
+        self.assertEqual(paid.complete_calls, [])
+
 
     def test_default_registry_supports_openai_compatible_transport(self):
         module = self._module()
