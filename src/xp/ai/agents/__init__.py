@@ -11,3 +11,11 @@ __all__ = [
     "AgentRunResult",
     "AgentRuntime",
 ]
+
+from .runtime_adapter import AgentRuntimeAdapter, ReadinessProbe, RunHandler
+
+try:
+    __all__
+except NameError:
+    __all__ = []
+__all__ = [*__all__, "AgentRuntimeAdapter", "ReadinessProbe", "RunHandler"]
