@@ -19,12 +19,18 @@ from .contracts import (
     AIResponse,
     AITransport,
 )
+from .job_state import JobAIStateStore
+from .policy import (
+    AIPolicyBlockedError,
+    PolicyDecisionKind,
+    ZeroCostPolicy,
+)
 from .settings import AISettings, AISettingsError
 from .transports.openai_compatible import OpenAICompatibleTransport
 
 
 class AIGateway:
-    """Route-dispatch boundary for XP AI transports."""
+    '''Route-dispatch boundary for XP AI transports.'''
 
     def __init__(
         self,
@@ -35,6 +41,8 @@ class AIGateway:
         activity_job_id: str | None = None,
         capability_registry: CapabilityRegistry | None = None,
         now=None,
+        policy: ZeroCostPolicy | None = None,
+        job_state_store: JobAIStateStore | None = None,
     ):
         self._settings = settings
         self._transports: dict[str, AITransport] = (
@@ -48,6 +56,8 @@ class AIGateway:
         self._now = now or (
             lambda: datetime.now(timezone.utc)
         )
+        self._policy = policy or ZeroCostPolicy()
+        self._job_state_store = job_state_store
 
         if (
             self._activity_recorder is not None
@@ -80,16 +90,15 @@ class AIGateway:
         transport = self._transport_for(route)
         return transport.readiness(route)
 
-
     def live_readiness_probe(
         self,
         route_id: str | None = None,
     ):
-        """Build an explicit AF-03 readiness probe for one AI route.
+        '''Build an explicit AF-03 readiness probe for one AI route.
 
         This calls the existing transport readiness boundary only.
         It never sends a completion request and never changes route.
-        """
+        '''
 
         from ..capabilities import (
             CapabilitySnapshot,
@@ -126,8 +135,6 @@ class AIGateway:
             run=run,
         )
 
-
-
     def _record_ai_activity(
         self,
         *,
@@ -135,6 +142,8 @@ class AIGateway:
         status: ActivityStatus,
         result_summary: str,
         model: str | None,
+        action: str = "AI completion",
+        policy_decision: str = "ALLOW",
     ) -> None:
         if self._activity_recorder is None:
             return
@@ -146,7 +155,7 @@ class AIGateway:
             job_id=self._activity_job_id,
             timestamp=self._now(),
             category=ActivityCategory.AI,
-            action="AI completion",
+            action=action,
             provenance=Provenance(
                 source="ai-knowledge",
                 processor=processor,
@@ -159,18 +168,59 @@ class AIGateway:
                 "route_id": route.route_id,
                 "model": processor,
                 "transport": route.transport,
+                "cost_class": route.cost_class,
+                "policy_decision": policy_decision,
             },
         )
 
         self._activity_recorder.record(event)
 
+    def _unknown_approval(
+        self,
+        *,
+        route,
+        job_id: str | None,
+    ) -> bool:
+        if route.cost_class != "unknown":
+            return False
+        if not job_id or self._job_state_store is None:
+            return False
+        return self._job_state_store.is_unknown_approved(
+            job_id,
+            route.route_id,
+            route.model,
+        )
 
     def complete(
         self,
         request: AIRequest,
         route_id: str | None = None,
+        *,
+        job_id: str | None = None,
     ) -> AIResponse:
         route = self.route(route_id)
+
+        effective_job_id = job_id or self._activity_job_id
+        approved_unknown = self._unknown_approval(
+            route=route,
+            job_id=effective_job_id,
+        )
+        decision = self._policy.evaluate(
+            route,
+            approved_unknown=approved_unknown,
+        )
+
+        if decision.kind is not PolicyDecisionKind.ALLOW:
+            self._record_ai_activity(
+                route=route,
+                status=ActivityStatus.FAILED,
+                result_summary=decision.reason,
+                model=route.model,
+                action="AI policy",
+                policy_decision=decision.kind.value,
+            )
+            raise AIPolicyBlockedError(decision.reason)
+
         transport = self._transport_for(route)
 
         try:
@@ -194,6 +244,7 @@ class AIGateway:
                     "AI execution failed"
                 ),
                 model=route.model,
+                policy_decision=decision.kind.value,
             )
 
             raise
@@ -203,6 +254,7 @@ class AIGateway:
             status=ActivityStatus.COMPLETED,
             result_summary="AI execution completed",
             model=response.model,
+            policy_decision=decision.kind.value,
         )
 
         return response

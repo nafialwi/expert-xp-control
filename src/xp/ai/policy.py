@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from .contracts import AIRoute
+from .contracts import AIGatewayError, AIRoute
+
+
+class AIPolicyBlockedError(AIGatewayError):
+    '''Raised when AF-04 policy prevents AI execution.'''
+
 
 
 class PolicyDecisionKind(str, Enum):
