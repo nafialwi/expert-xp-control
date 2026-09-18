@@ -2,7 +2,7 @@
 
 **Spec Version:** 1.0
 **Date:** 2026-09-18
-**Status:** REVIEW CANDIDATE
+**Status:** FINAL LOCK
 **Baseline:** `work/xp-plus-v1 @ 308f78f`
 **Depends On:** AF-02 AI Gateway, AF-03 Capability/Provenance/Activity Transparency
 
