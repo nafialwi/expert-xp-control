@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-16T09:46:53.506051+00:00",
+        "last_active_at": "2026-09-19T10:01:41.241912+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -899,7 +899,25 @@
       "run_id": "segeran-jiwa-pos-next-CS-06-P7-RESTOCK-TRANSFER-bb0716c2",
       "stage": "LOCKED_REMOTE",
       "state_version": 1,
-      "updated_at": "2026-09-16T09:50:32.674748+00:00"
+      "updated_at": "2026-09-16T09:50:36.013679+00:00"
+    },
+    {
+      "created_at": "2026-09-19T10:01:44.708381+00:00",
+      "metadata": {
+        "_last_stage": "PACKAGE_VALIDATED",
+        "base_fingerprint": "44a1c4f60511f0450aff6a02d701252d07a44cb495d77223969b15eabb8ed0b1",
+        "branch": "work/cs06743-patch3-hardening",
+        "head": "6d06bb4aabd5113aad7b65205c2c077af75fd662",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P8-INVENTORY-CONTROLS-64c9292e/package.zip",
+        "remote_lease": "ACTIVE",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": "CS-06-P8-INVENTORY-CONTROLS",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-06-P8-INVENTORY-CONTROLS-64c9292e",
+      "stage": "PACKAGE_VALIDATED",
+      "state_version": 1,
+      "updated_at": "2026-09-19T10:02:02.067369+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
