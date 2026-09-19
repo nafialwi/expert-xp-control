@@ -73,3 +73,16 @@ lifecycle-critical production path must have an engine-provided,
 regression-tested production default. Injection is for tests; defaults are for
 truth. This rule was established by the XP+-08 V3 candidate-match masking
 incident and the XP+-10 missing health-authority incident.
+
+## XP+ 2.1.0 Final Release Train Addendum
+
+The existing A-RB and public-path boundary sections above remain authoritative.
+
+Additional stable-install evidence:
+- canonical `install.py` derives the engine version from `src/xp/__init__.py`;
+- `installer.sh` is a compatibility wrapper over the canonical installer;
+- clean installation is verified in an isolated HOME;
+- `xp version`, `xp schema work`, and `xp self-test` are verified after install;
+- the rc18.3 rollback origin remains preserved for the public bootstrap path;
+- Stage 10 must still verify the real GitHub/public path before
+  `STABLE_DECLARED=YES`.

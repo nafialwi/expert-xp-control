@@ -67,3 +67,12 @@ lifecycle-critical production path must have an engine-provided,
 regression-tested production default. Injection is for tests; defaults are for
 truth. This rule was established by the XP+-08 V3 candidate-match masking
 incident and the XP+-10 missing health-authority incident.
+
+## 2.1.0 — 2026-09-19
+
+- Promote XP+ after AF-00..AF-10 capability acceptance.
+- Preserve profile/state/package protocol v1 compatibility.
+- Add governed worker safety, hybrid AI routing, orchestration, recovery portability,
+  and local visual workstation acceptance.
+- Validate universal fixtures plus Segeran Jiwa Legacy and Next.
+- Preserve rc18.3 as tested rollback origin.

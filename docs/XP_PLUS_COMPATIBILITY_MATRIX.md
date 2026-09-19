@@ -68,3 +68,23 @@ lifecycle-critical production path must have an engine-provided,
 regression-tested production default. Injection is for tests; defaults are for
 truth. This rule was established by the XP+-08 V3 candidate-match masking
 incident and the XP+-10 missing health-authority incident.
+
+## XP+ 2.1.0 Final Release Train Results
+
+This section is additive. The binding §14 / Zone-1 / Zone-2 / Evidence matrix
+above remains authoritative and unchanged.
+
+| Final release gate | Result |
+|---|---|
+| Pre-promotion full engine regression | PASS (405 tests; skipped=2) |
+| Stable source identity | PASS (`2.1.0`) |
+| Canonical version-derived installer contract | PASS |
+| Isolated clean install of stable source | PASS |
+| Legacy + Next non-production compatibility revalidation | PASS |
+| rc18.3 upgrade lifecycle contract | PASS |
+| Failed-candidate A-RB rollback contract | PASS |
+
+The historical rc18.3 built-in `xp upgrade` defect remains documented above;
+the public stable upgrade path is the verified release bootstrap asset and
+A-RB lifecycle, not an assumption that the old rc18.3 command was repaired in
+place.
