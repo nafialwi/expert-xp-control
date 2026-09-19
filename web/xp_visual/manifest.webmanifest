@@ -1,0 +1,10 @@
+{
+  "name": "Expert XP Visual Workstation",
+  "short_name": "Expert XP",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07101d",
+  "theme_color": "#0b1220",
+  "description": "Local-only visual status surface for Expert XP."
+}

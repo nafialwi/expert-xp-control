@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <title>Expert XP Visual Workstation</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">XP</div>
+      <div>
+        <strong>Expert XP</strong>
+        <span>Personal Agentic Workstation</span>
+      </div>
+    </div>
+    <nav>
+      <button class="nav active">Overview</button>
+      <button class="nav" data-target="activity">Activity Trail</button>
+    </nav>
+    <div class="side-note">
+      <span class="dot"></span>
+      Local-only interface
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">VISUAL WORKSTATION</p>
+        <h1 id="project">Memuat status…</h1>
+        <p id="checkpoint" class="sub">Checkpoint —</p>
+      </div>
+      <div class="top-actions">
+        <span id="sourceBadge" class="badge">LOCAL/OFFLINE</span>
+        <button id="refresh">Refresh Status</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <p class="eyebrow">CURRENT MODE</p>
+        <h2 id="mode">—</h2>
+        <p id="finalStatus">Status —</p>
+      </div>
+      <div class="hero-grid">
+        <div><span>Provider</span><b id="provider">—</b></div>
+        <div><span>Model</span><b id="model">—</b></div>
+        <div><span>Cost</span><b id="cost">—</b></div>
+        <div><span>Worker</span><b id="worker">—</b></div>
+      </div>
+    </section>
+
+    <section class="cards">
+      <article>
+        <span>Recovery</span>
+        <strong id="recovery">—</strong>
+      </article>
+      <article>
+        <span>Permission</span>
+        <strong id="permission">—</strong>
+      </article>
+      <article>
+        <span>Approval</span>
+        <strong id="approval">—</strong>
+      </article>
+      <article>
+        <span>Verification</span>
+        <strong id="verification">—</strong>
+      </article>
+      <article>
+        <span>Rollback</span>
+        <strong id="rollback">—</strong>
+      </article>
+    </section>
+
+    <section id="activity" class="panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">OBSERVABLE EVIDENCE</p>
+          <h2>Activity Trail</h2>
+        </div>
+        <span id="activityCount" class="badge">0 events</span>
+      </div>
+      <div id="activityList" class="timeline">
+        <div class="empty">Belum ada aktivitas pada snapshot ini.</div>
+      </div>
+    </section>
+
+    <footer>
+      Expert XP visual surface · observable state only · no hidden reasoning
+    </footer>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

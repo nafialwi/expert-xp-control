@@ -1,0 +1,35 @@
+:root{
+  color-scheme:dark;
+  --bg:#07101d;
+  --panel:#0d1828;
+  --panel2:#111f33;
+  --line:#203149;
+  --text:#edf4ff;
+  --muted:#93a5bc;
+  --accent:#62a8ff;
+  --good:#55d6a8;
+  --warn:#ffcc66;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 80% 0,#122744 0,transparent 32%),var(--bg);color:var(--text);min-height:100vh}
+.sidebar{position:fixed;inset:0 auto 0 0;width:260px;padding:24px 18px;border-right:1px solid var(--line);background:rgba(6,14,25,.94);display:flex;flex-direction:column}
+.brand{display:flex;gap:12px;align-items:center;margin-bottom:32px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#3d8fff,#7bc2ff);display:grid;place-items:center;font-weight:800;color:#03101f;box-shadow:0 10px 30px rgba(61,143,255,.25)}
+.brand strong{display:block;font-size:17px}.brand span{font-size:12px;color:var(--muted)}
+nav{display:grid;gap:8px}.nav{border:0;text-align:left;padding:12px 14px;border-radius:10px;background:transparent;color:var(--muted);font-weight:650}.nav.active,.nav:hover{background:#12243a;color:var(--text)}
+.side-note{margin-top:auto;padding:13px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:12px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--good);margin-right:7px}
+main{margin-left:260px;padding:34px;max-width:1500px}
+.topbar{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:26px}
+h1,h2,p{margin-top:0}.eyebrow{font-size:11px;letter-spacing:.15em;color:var(--accent);font-weight:800;margin-bottom:8px}.sub{color:var(--muted)}
+.top-actions{display:flex;align-items:center;gap:10px}.badge{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:8px 12px;color:var(--muted);font-size:12px;font-weight:700}
+button#refresh{border:0;border-radius:10px;padding:10px 14px;background:var(--accent);color:#04101d;font-weight:800;cursor:pointer}
+.hero{display:grid;grid-template-columns:minmax(220px,.8fr) 2fr;gap:20px;padding:24px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,rgba(20,42,70,.95),rgba(10,23,39,.95));box-shadow:0 20px 60px rgba(0,0,0,.22)}
+.hero h2{font-size:34px;margin-bottom:8px}.hero p:last-child{color:var(--muted)}
+.hero-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.hero-grid div,.cards article{padding:16px;border-radius:14px;background:rgba(8,20,35,.75);border:1px solid rgba(79,116,158,.25)}.hero-grid span,.cards span{display:block;color:var(--muted);font-size:12px;margin-bottom:8px}.hero-grid b,.cards strong{font-size:14px;word-break:break-word}
+.cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:18px 0}.cards article strong{font-size:16px}
+.panel{border:1px solid var(--line);border-radius:18px;background:rgba(10,23,39,.88);padding:22px}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:16px}.panel-head h2{margin-bottom:0}
+.timeline{display:grid;gap:10px;margin-top:18px}.event{display:grid;grid-template-columns:140px 1fr auto;gap:14px;padding:14px;border-radius:12px;background:var(--panel2);border:1px solid var(--line)}.event .status{font-size:11px;font-weight:800;color:var(--good)}.event p{margin:4px 0;color:var(--muted);font-size:13px}.event small{color:#6f8198}.empty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
+footer{padding:20px 4px;color:#6f8198;font-size:12px}
+@media(max-width:980px){.sidebar{position:static;width:auto;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:16px}.sidebar nav,.side-note{display:none}main{margin-left:0;padding:18px}.topbar,.hero{grid-template-columns:1fr;display:grid}.hero-grid{grid-template-columns:repeat(2,1fr)}.cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.top-actions{align-items:flex-start;flex-direction:column}.hero-grid,.cards{grid-template-columns:1fr}.event{grid-template-columns:1fr}.hero h2{font-size:28px}}
