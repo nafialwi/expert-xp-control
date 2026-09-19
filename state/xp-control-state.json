@@ -28,7 +28,7 @@
         "status": "LOCAL"
       },
       "segeran-jiwa-pos-next": {
-        "last_active_at": "2026-09-19T10:01:41.241912+00:00",
+        "last_active_at": "2026-09-19T10:21:11.667776+00:00",
         "name": "Segeran Jiwa POS Next",
         "project_id": "segeran-jiwa-pos-next",
         "remote_url": "git@github.com:nafialwi/segeran-jiwa-pos-next.git",
@@ -904,20 +904,54 @@
     {
       "created_at": "2026-09-19T10:01:44.708381+00:00",
       "metadata": {
-        "_last_stage": "PACKAGE_VALIDATED",
+        "_last_stage": "DB_APPROVAL_REQUIRED",
         "base_fingerprint": "44a1c4f60511f0450aff6a02d701252d07a44cb495d77223969b15eabb8ed0b1",
         "branch": "work/cs06743-patch3-hardening",
+        "changed_paths": [
+          "docs/superpowers/specs/2026-09-19-cs-06-p8-inventory-controls-design.md",
+          "docs/superpowers/plans/2026-09-19-cs-06-p8-inventory-controls.md",
+          "supabase/migrations/20260919170000_cs06_p8_inventory_controls.sql",
+          "supabase/tests/cs06_p8_inventory_controls_test.sql",
+          "tests/test_cs06_p8_inventory_controls.py",
+          "tests/test_cs02_migrations.py"
+        ],
+        "control_sync": "CLEAR",
         "head": "6d06bb4aabd5113aad7b65205c2c077af75fd662",
         "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P8-INVENTORY-CONTROLS-64c9292e/package.zip",
         "remote_lease": "ACTIVE",
-        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+        "remote_safepoint": "CLEAR",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next",
+        "safepoint_head": "79bbe45d7dd2a5f6cbb64fd5891fc1778360bb02",
+        "safepoint_pushed": true,
+        "warning_status": "KNOWN",
+        "working_fingerprint": "49163c5f2423b83893851cb0e787a32c10abba3b7c37833e962d818ff8981f92"
       },
       "milestone": "CS-06-P8-INVENTORY-CONTROLS",
       "project_id": "segeran-jiwa-pos-next",
       "run_id": "segeran-jiwa-pos-next-CS-06-P8-INVENTORY-CONTROLS-64c9292e",
-      "stage": "PACKAGE_VALIDATED",
+      "stage": "DB_APPROVAL_REQUIRED",
       "state_version": 1,
-      "updated_at": "2026-09-19T10:02:02.067369+00:00"
+      "updated_at": "2026-09-19T10:02:39.954159+00:00"
+    },
+    {
+      "created_at": "2026-09-19T10:21:15.428063+00:00",
+      "metadata": {
+        "_last_stage": "WAITING_GPT",
+        "base_fingerprint": "5dbc6a74a61ba131e32034358507118bfe451a501860a5d22bd2748d87a490be",
+        "branch": "work/cs06743-patch3-hardening",
+        "failure_message": "Paket XP tidak cocok dengan kondisi project.",
+        "head": "79bbe45d7dd2a5f6cbb64fd5891fc1778360bb02",
+        "incident_challenge": "051ff0ab1cfb0fde8e601ed6b840911b",
+        "incident_id": "INC-23BC4F66",
+        "package": "/data/data/com.termux/files/home/.expert-workstation/runs/segeran-jiwa-pos-next-CS-06-P8-INVENTORY-CONTROLS-8278beff/package.zip",
+        "repo": "/data/data/com.termux/files/home/WORKSTATION/projects/segeran-jiwa-pos-next"
+      },
+      "milestone": "CS-06-P8-INVENTORY-CONTROLS",
+      "project_id": "segeran-jiwa-pos-next",
+      "run_id": "segeran-jiwa-pos-next-CS-06-P8-INVENTORY-CONTROLS-8278beff",
+      "stage": "WAITING_GPT",
+      "state_version": 1,
+      "updated_at": "2026-09-19T10:21:15.442048+00:00"
     },
     {
       "created_at": "2026-09-13T10:39:45.669996+00:00",
