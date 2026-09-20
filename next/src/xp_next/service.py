@@ -29,10 +29,10 @@ def status(home: Path | str | None = None) -> dict[str, object]:
         return {
             "product": "XP Next",
             "version": __version__,
-            "phase": "CP-04B",
+            "phase": "CP-05A",
             "runtime": "LOCAL_STATE_ACTIVE",
             "ai": "LOCAL_READ_ONLY_ADAPTER",
-            "worker": "NOT_INTEGRATED",
+            "worker": "LOCAL_HERMES_ISOLATED_ADAPTER",
             "database": "READY",
             "project_count": len(listed),
             "active_project": active,
