@@ -72,11 +72,20 @@ class ProjectServiceTests(unittest.TestCase):
                 service.register("p1", "One", project, source_kind="local")
                 service.switch("p1")
             snapshot = status(home)
-            self.assertEqual(snapshot["phase"], "CP-02A")
+            self.assertEqual(snapshot["phase"], "CP-02B")
             self.assertEqual(snapshot["runtime"], "LOCAL_STATE_ACTIVE")
             self.assertEqual(snapshot["database"], "READY")
             self.assertEqual(snapshot["project_count"], 1)
             self.assertEqual(snapshot["active_project"]["id"], "p1")
+            self.assertEqual(
+                snapshot["active_project_inspection"]["project_id"],
+                "p1",
+            )
+            self.assertEqual(
+                set(snapshot["local_capabilities"]),
+                {"python", "git", "node"},
+            )
+            self.assertFalse(snapshot["network_probe_performed"])
             self.assertEqual(snapshot["ai"], "NOT_INTEGRATED")
             self.assertEqual(snapshot["worker"], "NOT_INTEGRATED")
             self.assertFalse(snapshot["network_required"])

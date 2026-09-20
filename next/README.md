@@ -2,14 +2,16 @@
 
 XP Next is a fresh, zero-cost-first local AI work system under active construction.
 
-Current checkpoint: CP-02A.
+Current checkpoint: CP-02B.
 
 Implemented so far:
 - canonical JobState contract;
 - SQLite schema v1 and persistent StateStore;
 - canonical local runtime-home layout;
 - local project register/list/switch/current service;
-- state-backed status;
+- bounded read-only project inspection;
+- local capability registry foundation for Python, Git, and Node;
+- state-backed status with observed project/capability facts;
 - local-only doctor;
 - zero-cost independence acceptance fixture.
 

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .state_store import StateStore
+from .project_inspector import ProjectInspector
+from .state_store import ProjectNotFound, StateStore
 
 
 class ProjectRootError(ValueError):
@@ -10,8 +11,14 @@ class ProjectRootError(ValueError):
 
 
 class ProjectService:
-    def __init__(self, store: StateStore):
+    def __init__(
+        self,
+        store: StateStore,
+        *,
+        inspector: ProjectInspector | None = None,
+    ):
         self.store = store
+        self.inspector = inspector or ProjectInspector()
 
     def register(
         self,
@@ -48,3 +55,19 @@ class ProjectService:
 
     def current(self) -> dict[str, object] | None:
         return self.store.get_active_project()
+
+    def inspect(self, project_id: str | None = None) -> dict[str, object]:
+        if project_id is None:
+            project = self.current()
+            if project is None:
+                raise ProjectNotFound("no active project")
+        else:
+            project = self.store.get_project(project_id)
+
+        facts = self.inspector.inspect(str(project["root_path"]))
+        return {
+            "project_id": project["id"],
+            "project_name": project["name"],
+            "source_kind": project["source_kind"],
+            **facts,
+        }

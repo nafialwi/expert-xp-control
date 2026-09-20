@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .capability_registry import LocalCapabilityRegistry
 from .project_service import ProjectService
 from .runtime import XPRuntime
 from .service import doctor, status, version
@@ -25,11 +26,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("version")
     sub.add_parser("status")
     sub.add_parser("doctor")
+    sub.add_parser("capabilities")
 
     project = sub.add_parser("project")
     project_sub = project.add_subparsers(dest="project_command", required=True)
     project_sub.add_parser("list")
     project_sub.add_parser("current")
+
+    inspect = project_sub.add_parser("inspect")
+    inspect.add_argument("project_id", nargs="?", default=None)
 
     register = project_sub.add_parser("register")
     register.add_argument("--id", required=True)
@@ -54,6 +59,9 @@ def _project_command(args: argparse.Namespace) -> int:
             return 0
         if args.project_command == "current":
             _print({"project": projects.current()})
+            return 0
+        if args.project_command == "inspect":
+            _print({"inspection": projects.inspect(args.project_id)})
             return 0
         if args.project_command == "register":
             _print(
@@ -83,6 +91,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "doctor":
         _print(doctor())
+        return 0
+    if args.command == "capabilities":
+        _print({"capabilities": LocalCapabilityRegistry().snapshot()})
         return 0
     if args.command == "project":
         return _project_command(args)
