@@ -2,7 +2,7 @@
 
 XP Next is a fresh, zero-cost-first local AI work system under active construction.
 
-Current checkpoint: CP-02B.
+Current checkpoint: CP-03A.
 
 Implemented so far:
 - canonical JobState contract;
@@ -10,9 +10,11 @@ Implemented so far:
 - canonical local runtime-home layout;
 - local project register/list/switch/current service;
 - bounded read-only project inspection;
-- local capability registry foundation for Python, Git, and Node;
-- state-backed status with observed project/capability facts;
-- local-only doctor;
+- local capability registry for Python, Git, Node, SQLite, local-Qwen presence, and Hermes presence;
+- explicit separation between READY and presence-only AVAILABLE capability state;
+- bounded ProjectContext with observed facts separated from inferred hints;
+- first read-only TaskIntent contract;
+- local-only status/doctor;
 - zero-cost independence acceptance fixture.
 
 Default runtime home:
@@ -25,5 +27,5 @@ Current runtime-home layout:
 - workspaces/
 - logs/
 
-Qwen, Hermes, 9Router, PWA, connectors, sandbox execution, real project mutation,
-review/apply, and production actions are intentionally not integrated yet.
+Qwen reasoning, Hermes execution, 9Router, PWA, connectors, sandbox execution,
+real project mutation, review/apply, and production actions are intentionally not integrated yet.

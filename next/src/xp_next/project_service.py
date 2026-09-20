@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .project_context import ProjectContextBuilder
 from .project_inspector import ProjectInspector
 from .state_store import ProjectNotFound, StateStore
+from .task_contract import TaskIntent
 
 
 class ProjectRootError(ValueError):
@@ -16,9 +18,11 @@ class ProjectService:
         store: StateStore,
         *,
         inspector: ProjectInspector | None = None,
+        context_builder: ProjectContextBuilder | None = None,
     ):
         self.store = store
         self.inspector = inspector or ProjectInspector()
+        self.context_builder = context_builder or ProjectContextBuilder()
 
     def register(
         self,
@@ -56,14 +60,16 @@ class ProjectService:
     def current(self) -> dict[str, object] | None:
         return self.store.get_active_project()
 
-    def inspect(self, project_id: str | None = None) -> dict[str, object]:
+    def _resolve_project(self, project_id: str | None) -> dict[str, object]:
         if project_id is None:
             project = self.current()
             if project is None:
                 raise ProjectNotFound("no active project")
-        else:
-            project = self.store.get_project(project_id)
+            return project
+        return self.store.get_project(project_id)
 
+    def inspect(self, project_id: str | None = None) -> dict[str, object]:
+        project = self._resolve_project(project_id)
         facts = self.inspector.inspect(str(project["root_path"]))
         return {
             "project_id": project["id"],
@@ -71,3 +77,19 @@ class ProjectService:
             "source_kind": project["source_kind"],
             **facts,
         }
+
+    def context(
+        self,
+        *,
+        task: TaskIntent,
+        capabilities: dict[str, dict[str, object]],
+        project_id: str | None = None,
+    ) -> dict[str, object]:
+        project = self._resolve_project(project_id)
+        inspection = self.inspector.inspect(str(project["root_path"]))
+        return self.context_builder.build(
+            project=project,
+            inspection=inspection,
+            capabilities=capabilities,
+            task=task,
+        ).as_dict()

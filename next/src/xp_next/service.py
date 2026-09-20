@@ -9,6 +9,7 @@ from . import __version__
 from .capability_registry import LocalCapabilityRegistry
 from .project_service import ProjectService
 from .runtime import XPRuntime
+from .task_contract import TaskIntent, TaskIntentKind
 
 
 def version() -> dict[str, object]:
@@ -25,7 +26,7 @@ def status(home: Path | str | None = None) -> dict[str, object]:
         return {
             "product": "XP Next",
             "version": __version__,
-            "phase": "CP-02B",
+            "phase": "CP-03A",
             "runtime": "LOCAL_STATE_ACTIVE",
             "ai": "NOT_INTEGRATED",
             "worker": "NOT_INTEGRATED",
@@ -37,6 +38,24 @@ def status(home: Path | str | None = None) -> dict[str, object]:
             "network_required": False,
             "network_probe_performed": False,
         }
+
+
+def build_project_context(
+    home: Path | str | None,
+    *,
+    goal: str,
+    intent: TaskIntentKind,
+    project_id: str | None = None,
+) -> dict[str, object]:
+    capabilities = LocalCapabilityRegistry().snapshot()
+    task = TaskIntent.read_only(goal=goal, kind=intent)
+    with XPRuntime.open(home) as runtime:
+        projects = ProjectService(runtime.store)
+        return projects.context(
+            task=task,
+            capabilities=capabilities,
+            project_id=project_id,
+        )
 
 
 def doctor() -> dict[str, object]:

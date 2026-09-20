@@ -7,7 +7,8 @@ from pathlib import Path
 from .capability_registry import LocalCapabilityRegistry
 from .project_service import ProjectService
 from .runtime import XPRuntime
-from .service import doctor, status, version
+from .service import build_project_context, doctor, status, version
+from .task_contract import TaskIntentKind
 
 
 def _print(data: object) -> None:
@@ -36,6 +37,15 @@ def build_parser() -> argparse.ArgumentParser:
     inspect = project_sub.add_parser("inspect")
     inspect.add_argument("project_id", nargs="?", default=None)
 
+    context = project_sub.add_parser("context")
+    context.add_argument("--goal", required=True)
+    context.add_argument(
+        "--intent",
+        choices=["inspect", "analyze", "explain"],
+        default="inspect",
+    )
+    context.add_argument("project_id", nargs="?", default=None)
+
     register = project_sub.add_parser("register")
     register.add_argument("--id", required=True)
     register.add_argument("--name", required=True)
@@ -52,6 +62,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _project_command(args: argparse.Namespace) -> int:
+    if args.project_command == "context":
+        intent = TaskIntentKind(args.intent.upper())
+        _print(
+            {
+                "context": build_project_context(
+                    args.home,
+                    goal=args.goal,
+                    intent=intent,
+                    project_id=args.project_id,
+                )
+            }
+        )
+        return 0
+
     with XPRuntime.open(args.home) as runtime:
         projects = ProjectService(runtime.store)
         if args.project_command == "list":

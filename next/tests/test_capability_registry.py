@@ -62,7 +62,7 @@ class CapabilityRegistryTests(unittest.TestCase):
             which=lambda name: None,
             version_probe=lambda name, executable: "unused",
         ).snapshot()
-        self.assertEqual(set(snapshot), {"python", "git", "node"})
+        self.assertEqual(set(snapshot), {"python", "git", "node", "sqlite", "local_qwen", "hermes"})
 
 
 if __name__ == "__main__":
