@@ -1,0 +1,28 @@
+{
+  "schema": "xp-next.zero-cost-independence.v1",
+  "required_environment": {
+    "chatgpt_available": false,
+    "paid_api_available": false,
+    "router9_available": false,
+    "internet_required": false,
+    "local_qwen_required": true,
+    "hermes_required": true
+  },
+  "user_goal": "Perbaiki failing test pada project fixture.",
+  "required_flow": [
+    "resolve_project",
+    "inspect_context",
+    "build_bounded_plan",
+    "request_write_approval",
+    "execute_in_sandbox",
+    "run_verifier",
+    "present_review",
+    "apply_or_discard"
+  ],
+  "forbidden_dependencies": [
+    "WAITING_GPT",
+    "XP_GPT_HANDOFF",
+    "paid_api",
+    "mandatory_cloud"
+  ]
+}

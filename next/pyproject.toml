@@ -1,0 +1,13 @@
+[build-system]
+requires = []
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xp-next"
+version = "0.1.0.dev0"
+description = "Zero-cost-first local AI work system"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+xp-next = "xp_next.cli:main"
