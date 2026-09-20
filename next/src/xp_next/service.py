@@ -9,7 +9,8 @@ from . import __version__
 from .capability_registry import LocalCapabilityRegistry
 from .project_service import ProjectService
 from .local_qwen import LocalQwenAdapter
-from .reasoning import ReasoningRequest, compact_reasoning_context
+from .planner import BoundedReadOnlyPlanner, verify_plan
+from .reasoning import ReasoningRequest, ReasoningResult, ReasoningStatus, compact_reasoning_context
 from .runtime import XPRuntime
 from .task_contract import TaskIntent, TaskIntentKind
 
@@ -28,7 +29,7 @@ def status(home: Path | str | None = None) -> dict[str, object]:
         return {
             "product": "XP Next",
             "version": __version__,
-            "phase": "CP-04A",
+            "phase": "CP-04B",
             "runtime": "LOCAL_STATE_ACTIVE",
             "ai": "LOCAL_READ_ONLY_ADAPTER",
             "worker": "NOT_INTEGRATED",
@@ -69,6 +70,38 @@ def doctor() -> dict[str, object]:
     }
 
 
+def _reason_from_context(
+    *,
+    context: dict[str, object],
+    task: TaskIntent,
+    base_url: str,
+    model: str,
+    max_tokens: int,
+    timeout: float,
+) -> dict[str, object]:
+    request = ReasoningRequest(
+        task=task,
+        context=compact_reasoning_context(context),
+        max_tokens=max_tokens,
+    )
+    adapter = LocalQwenAdapter(
+        base_url=base_url,
+        model=model,
+        timeout=timeout,
+    )
+    readiness = adapter.readiness()
+    if not readiness.ready:
+        return {
+            "readiness": readiness.as_dict(),
+            "result": None,
+        }
+    result = adapter.reason(request)
+    return {
+        "readiness": readiness.as_dict(),
+        "result": result.as_dict(),
+    }
+
+
 def reason_project_context(
     home: Path | str | None,
     *,
@@ -86,20 +119,78 @@ def reason_project_context(
         intent=intent,
         project_id=project_id,
     )
-    request = ReasoningRequest(
-        task=TaskIntent.read_only(goal=goal, kind=intent),
-        context=compact_reasoning_context(context),
+    task = TaskIntent.read_only(goal=goal, kind=intent)
+    return _reason_from_context(
+        context=context,
+        task=task,
+        base_url=base_url,
+        model=model,
         max_tokens=max_tokens,
+        timeout=timeout,
     )
-    adapter = LocalQwenAdapter(base_url=base_url, model=model, timeout=timeout)
-    readiness = adapter.readiness()
-    if not readiness.ready:
-        return {
-            "readiness": readiness.as_dict(),
-            "result": None,
-        }
-    result = adapter.reason(request)
+
+def build_read_only_plan(
+    home: Path | str | None,
+    *,
+    goal: str,
+    intent: TaskIntentKind,
+    project_id: str | None = None,
+    base_url: str = "http://127.0.0.1:8080",
+    model: str = "local",
+    max_tokens: int = 96,
+    timeout: float = 120.0,
+) -> dict[str, object]:
+    context = build_project_context(
+        home,
+        goal=goal,
+        intent=intent,
+        project_id=project_id,
+    )
+    task = TaskIntent.read_only(goal=goal, kind=intent)
+    reasoning_bundle = _reason_from_context(
+        context=context,
+        task=task,
+        base_url=base_url,
+        model=model,
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )
+
+    raw_result = reasoning_bundle.get("result")
+    if isinstance(raw_result, dict):
+        reasoning = ReasoningResult(
+            status=ReasoningStatus(str(raw_result["status"])),
+            output=str(raw_result.get("output", "")),
+            backend_id=str(raw_result.get("backend_id", "local_qwen")),
+            model=str(raw_result.get("model", model)),
+            transport=str(raw_result.get("transport", "loopback_http")),
+            external_network_used=bool(raw_result.get("external_network_used")),
+            detail=str(raw_result.get("detail", "")),
+        )
+    else:
+        readiness = reasoning_bundle.get("readiness")
+        detail = ""
+        if isinstance(readiness, dict):
+            detail = str(readiness.get("detail", "reasoning backend unavailable"))
+        reasoning = ReasoningResult(
+            status=ReasoningStatus.NEEDS_ATTENTION,
+            output="",
+            backend_id="local_qwen",
+            model=model,
+            transport="loopback_http",
+            external_network_used=False,
+            detail=detail or "reasoning backend unavailable",
+        )
+
+    plan = BoundedReadOnlyPlanner().build(
+        task=task,
+        context=compact_reasoning_context(context),
+        reasoning=reasoning,
+    )
+    ok, detail = verify_plan(plan)
     return {
-        "readiness": readiness.as_dict(),
-        "result": result.as_dict(),
+        "context": compact_reasoning_context(context),
+        "reasoning": reasoning_bundle,
+        "plan": plan.as_dict(),
+        "verification": {"ok": ok, "detail": detail},
     }
