@@ -50,7 +50,7 @@ class XPNextContractTests(unittest.TestCase):
     def test_status_is_honest_about_skeleton_state(self):
         snapshot = status()
         self.assertEqual(snapshot["product"], "XP Next")
-        self.assertEqual(snapshot["phase"], "CP-01A")
+        self.assertEqual(snapshot["phase"], "CP-01B")
         self.assertEqual(snapshot["runtime"], "SKELETON_ONLY")
         self.assertEqual(snapshot["ai"], "NOT_INTEGRATED")
         self.assertEqual(snapshot["worker"], "NOT_INTEGRATED")

@@ -11,11 +11,11 @@ def status() -> dict[str, object]:
     return {
         "product": "XP Next",
         "version": __version__,
-        "phase": "CP-01A",
+        "phase": "CP-01B",
         "runtime": "SKELETON_ONLY",
         "ai": "NOT_INTEGRATED",
         "worker": "NOT_INTEGRATED",
-        "database": "SCHEMA_DEFINED_NOT_INITIALIZED",
+        "database": "STATE_STORE_IMPLEMENTED_NOT_ACTIVATED",
         "network_required": False,
     }
 
