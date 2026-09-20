@@ -1,5 +1,7 @@
 from __future__ import annotations
 import sqlite3
+from pathlib import Path
+import tempfile
 import unittest
 from xp_next import __version__
 from xp_next.job_state import JobState, can_transition
@@ -47,11 +49,12 @@ class XPNextContractTests(unittest.TestCase):
         row = conn.execute("select value from meta where key='schema_version'").fetchone()
         self.assertEqual(row[0], "1")
 
-    def test_status_is_honest_about_skeleton_state(self):
-        snapshot = status()
+    def test_status_is_honest_about_local_state_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot = status(Path(tmp) / "xp-home")
         self.assertEqual(snapshot["product"], "XP Next")
-        self.assertEqual(snapshot["phase"], "CP-01B")
-        self.assertEqual(snapshot["runtime"], "SKELETON_ONLY")
+        self.assertEqual(snapshot["phase"], "CP-02A")
+        self.assertEqual(snapshot["runtime"], "LOCAL_STATE_ACTIVE")
         self.assertEqual(snapshot["ai"], "NOT_INTEGRATED")
         self.assertEqual(snapshot["worker"], "NOT_INTEGRATED")
         self.assertFalse(snapshot["network_required"])

@@ -82,6 +82,16 @@ class StateStore:
             )
         return self.get_project(project_id)
 
+    def list_projects(self) -> list[dict[str, object]]:
+        rows = self.connection.execute(
+            "SELECT * FROM projects ORDER BY id"
+        ).fetchall()
+        return [
+            result
+            for row in rows
+            if (result := _as_dict(row)) is not None
+        ]
+
     def get_project(self, project_id: str) -> dict[str, object]:
         row = self.connection.execute(
             "SELECT * FROM projects WHERE id=?",

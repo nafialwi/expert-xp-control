@@ -1,23 +1,37 @@
 from __future__ import annotations
+
+from pathlib import Path
 import shutil
 import sqlite3
 import sys
+
 from . import __version__
+from .project_service import ProjectService
+from .runtime import XPRuntime
+
 
 def version() -> dict[str, object]:
     return {"product": "XP Next", "version": __version__}
 
-def status() -> dict[str, object]:
-    return {
-        "product": "XP Next",
-        "version": __version__,
-        "phase": "CP-01B",
-        "runtime": "SKELETON_ONLY",
-        "ai": "NOT_INTEGRATED",
-        "worker": "NOT_INTEGRATED",
-        "database": "STATE_STORE_IMPLEMENTED_NOT_ACTIVATED",
-        "network_required": False,
-    }
+
+def status(home: Path | str | None = None) -> dict[str, object]:
+    with XPRuntime.open(home) as runtime:
+        projects = ProjectService(runtime.store)
+        listed = projects.list_projects()
+        active = projects.current()
+        return {
+            "product": "XP Next",
+            "version": __version__,
+            "phase": "CP-02A",
+            "runtime": "LOCAL_STATE_ACTIVE",
+            "ai": "NOT_INTEGRATED",
+            "worker": "NOT_INTEGRATED",
+            "database": "READY",
+            "project_count": len(listed),
+            "active_project": active,
+            "network_required": False,
+        }
+
 
 def doctor() -> dict[str, object]:
     return {
