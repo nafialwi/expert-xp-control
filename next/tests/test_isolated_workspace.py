@@ -105,6 +105,32 @@ class IsolatedWorkspaceTests(unittest.TestCase):
                     job_id="job-3",
                 )
 
+    def test_workspace_changed_paths_preserves_spaces_and_split_move(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "source"
+            source.mkdir()
+            (source / "old name.txt").write_text("old\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(source), "init", "-q"], check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(source), "config", "user.name", "Fixture"],
+                check=True,
+            )
+            subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+            subprocess.run(
+                ["git", "-C", str(source), "commit", "-qm", "baseline"],
+                check=True,
+            )
+            (source / "old name.txt").rename(source / "new name.txt")
+            self.assertEqual(
+                workspace_changed_paths(source),
+                ("new name.txt", "old name.txt"),
+            )
+
     def test_workspace_diff_detects_only_sandbox_change(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

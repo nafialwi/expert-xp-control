@@ -30,7 +30,7 @@ def status(home: Path | str | None = None) -> dict[str, object]:
         return {
             "product": "XP Next",
             "version": __version__,
-            "phase": "CP-06A",
+            "phase": "CP-07A",
             "runtime": "LOCAL_STATE_ACTIVE",
             "ai": "LOCAL_READ_ONLY_ADAPTER",
             "worker": "LOCAL_HERMES_ISOLATED_ADAPTER",

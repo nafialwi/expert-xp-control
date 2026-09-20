@@ -70,6 +70,9 @@ class ReviewBundle:
     bounded_diff: str
     diff_truncated: bool
     verifiers: tuple[VerifierResult, ...]
+    sandbox_head: str
+    change_fingerprint: str
+    verifier_spec_fingerprint: str
     apply_to_original_performed: bool = False
 
     def as_dict(self) -> dict[str, object]:
@@ -80,6 +83,9 @@ class ReviewBundle:
             "bounded_diff": self.bounded_diff,
             "diff_truncated": self.diff_truncated,
             "verifiers": [item.as_dict() for item in self.verifiers],
+            "sandbox_head": self.sandbox_head,
+            "change_fingerprint": self.change_fingerprint,
+            "verifier_spec_fingerprint": self.verifier_spec_fingerprint,
             "apply_to_original_performed": self.apply_to_original_performed,
         }
 
@@ -123,6 +129,49 @@ def _git(project: Path, *args: str, check: bool = True) -> subprocess.CompletedP
         timeout=20,
         env=env,
     )
+
+
+def _head(project: Path) -> str:
+    return _git(project, "rev-parse", "HEAD").stdout.strip()
+
+
+def _verifier_spec_fingerprint(specs: tuple[VerifierSpec, ...]) -> str:
+    digest = hashlib.sha256()
+    for spec in specs:
+        digest.update(spec.name.encode("utf-8"))
+        digest.update(bytes([0]))
+        for arg in spec.argv:
+            digest.update(arg.encode("utf-8"))
+            digest.update(bytes([0]))
+        digest.update(f"{spec.timeout_seconds:.6f}".encode("ascii"))
+        digest.update(bytes([0]))
+    return digest.hexdigest()
+
+
+def _change_fingerprint(project: Path, changed_files: tuple[str, ...]) -> str:
+    digest = hashlib.sha256()
+    digest.update(_head(project).encode("ascii"))
+    digest.update(bytes([0]))
+    for relative in changed_files:
+        digest.update(relative.encode("utf-8"))
+        digest.update(bytes([0]))
+        path = project / relative
+        if path.is_symlink():
+            digest.update(b"SYMLINK")
+        elif path.is_file():
+            digest.update(b"FILE")
+            with path.open("rb") as handle:
+                while True:
+                    chunk = handle.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+        elif path.exists():
+            digest.update(b"OTHER")
+        else:
+            digest.update(b"DELETED")
+        digest.update(bytes([0]))
+    return digest.hexdigest()
 
 
 def _content_digest(project: Path) -> str:
@@ -279,6 +328,14 @@ def _run_verifier(project: Path, spec: VerifierSpec) -> VerifierResult:
     )
 
 
+def run_verifiers(
+    project_root: Path | str,
+    verifier_specs: tuple[VerifierSpec, ...],
+) -> tuple[VerifierResult, ...]:
+    project = Path(project_root).expanduser().resolve(strict=True)
+    return tuple(_run_verifier(project, spec) for spec in verifier_specs)
+
+
 def build_review_bundle(
     project_root: Path | str,
     *,
@@ -293,6 +350,8 @@ def build_review_bundle(
 
     remotes = _git(project, "remote").stdout.split()
     changed = workspace_changed_paths(project)
+    sandbox_head = _head(project)
+    spec_fingerprint = _verifier_spec_fingerprint(verifier_specs)
 
     if remotes:
         diff, truncated = _bounded_diff(project, changed, max_diff_chars=max_diff_chars)
@@ -303,6 +362,9 @@ def build_review_bundle(
             bounded_diff=diff,
             diff_truncated=truncated,
             verifiers=(),
+            sandbox_head=sandbox_head,
+            change_fingerprint=_change_fingerprint(project, changed),
+            verifier_spec_fingerprint=spec_fingerprint,
         )
 
     if not changed:
@@ -313,6 +375,9 @@ def build_review_bundle(
             bounded_diff="",
             diff_truncated=False,
             verifiers=(),
+            sandbox_head=sandbox_head,
+            change_fingerprint=_change_fingerprint(project, changed),
+            verifier_spec_fingerprint=spec_fingerprint,
         )
 
     diff_check = _git(project, "diff", "--check", "HEAD", "--", check=False)
@@ -333,9 +398,12 @@ def build_review_bundle(
                     detail="git diff --check failed",
                 ),
             ),
+            sandbox_head=sandbox_head,
+            change_fingerprint=_change_fingerprint(project, changed),
+            verifier_spec_fingerprint=spec_fingerprint,
         )
 
-    verifier_results = tuple(_run_verifier(project, spec) for spec in verifier_specs)
+    verifier_results = run_verifiers(project, verifier_specs)
 
     final_changed = workspace_changed_paths(project)
     diff, truncated = _bounded_diff(
@@ -364,4 +432,7 @@ def build_review_bundle(
         bounded_diff=diff,
         diff_truncated=truncated,
         verifiers=verifier_results,
+        sandbox_head=sandbox_head,
+        change_fingerprint=_change_fingerprint(project, final_changed),
+        verifier_spec_fingerprint=spec_fingerprint,
     )

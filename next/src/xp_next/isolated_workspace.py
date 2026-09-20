@@ -148,18 +148,29 @@ def prepare_isolated_workspace(
 def workspace_changed_paths(project_root: Path | str) -> tuple[str, ...]:
     project = Path(project_root).expanduser().resolve(strict=True)
     proc = subprocess.run(
-        ["git", "-C", str(project), "status", "--porcelain"],
+        [
+            "git",
+            "-C",
+            str(project),
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--no-renames",
+        ],
         check=True,
         capture_output=True,
         text=True,
         timeout=15,
     )
     paths: list[str] = []
-    for line in proc.stdout.splitlines():
-        if not line:
+    for record in proc.stdout.split("\0"):
+        if not record:
             continue
-        value = line[3:]
-        if " -> " in value:
-            value = value.split(" -> ", 1)[1]
-        paths.append(value)
-    return tuple(sorted(paths))
+        if len(record) < 4 or record[2] != " ":
+            raise IsolationError(f"unexpected Git porcelain record: {record!r}")
+        path = record[3:]
+        if not path:
+            raise IsolationError("empty changed path from Git status")
+        paths.append(path)
+    return tuple(sorted(set(paths)))
