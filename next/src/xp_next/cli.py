@@ -7,7 +7,7 @@ from pathlib import Path
 from .capability_registry import LocalCapabilityRegistry
 from .project_service import ProjectService
 from .runtime import XPRuntime
-from .service import build_project_context, doctor, status, version
+from .service import build_project_context, doctor, reason_project_context, status, version
 from .task_contract import TaskIntentKind
 
 
@@ -46,6 +46,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     context.add_argument("project_id", nargs="?", default=None)
 
+    reason = project_sub.add_parser("reason")
+    reason.add_argument("--goal", required=True)
+    reason.add_argument(
+        "--intent",
+        choices=["inspect", "analyze", "explain"],
+        default="analyze",
+    )
+    reason.add_argument("--base-url", default="http://127.0.0.1:8080")
+    reason.add_argument("--model", default="local")
+    reason.add_argument("--max-tokens", type=int, default=128)
+    reason.add_argument("--timeout", type=float, default=120.0)
+    reason.add_argument("project_id", nargs="?", default=None)
+
     register = project_sub.add_parser("register")
     register.add_argument("--id", required=True)
     register.add_argument("--name", required=True)
@@ -62,6 +75,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _project_command(args: argparse.Namespace) -> int:
+    if args.project_command == "reason":
+        intent = TaskIntentKind(args.intent.upper())
+        _print(
+            reason_project_context(
+                args.home,
+                goal=args.goal,
+                intent=intent,
+                project_id=args.project_id,
+                base_url=args.base_url,
+                model=args.model,
+                max_tokens=args.max_tokens,
+                timeout=args.timeout,
+            )
+        )
+        return 0
+
     if args.project_command == "context":
         intent = TaskIntentKind(args.intent.upper())
         _print(

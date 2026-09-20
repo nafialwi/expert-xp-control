@@ -2,30 +2,25 @@
 
 XP Next is a fresh, zero-cost-first local AI work system under active construction.
 
-Current checkpoint: CP-03A.
+Current checkpoint: CP-04A.
 
 Implemented so far:
 - canonical JobState contract;
 - SQLite schema v1 and persistent StateStore;
 - canonical local runtime-home layout;
-- local project register/list/switch/current service;
-- bounded read-only project inspection;
-- local capability registry for Python, Git, Node, SQLite, local-Qwen presence, and Hermes presence;
-- explicit separation between READY and presence-only AVAILABLE capability state;
+- local project registry and bounded read-only project inspection;
+- local capability registry for Python, Git, Node, SQLite, local Qwen, and Hermes presence;
 - bounded ProjectContext with observed facts separated from inferred hints;
-- first read-only TaskIntent contract;
-- local-only status/doctor;
+- read-only TaskIntent contract;
+- provider-neutral read-only reasoning request/result contracts;
+- loopback-only LocalQwenAdapter with explicit readiness;
+- deterministic reasoning-result verification;
+- compact local reasoning context;
+- explicit failure as NEEDS_ATTENTION with no provider fallback;
 - zero-cost independence acceptance fixture.
 
-Default runtime home:
-- XP_NEXT_HOME when explicitly set;
-- otherwise ~/.xp-next.
+Local Qwen integration at CP-04A is read-only. It communicates only with an explicitly invoked
+loopback llama-server. Server lifecycle is not yet managed automatically by XP Next.
 
-Current runtime-home layout:
-- state/xp-next.sqlite3
-- artifacts/
-- workspaces/
-- logs/
-
-Qwen reasoning, Hermes execution, 9Router, PWA, connectors, sandbox execution,
-real project mutation, review/apply, and production actions are intentionally not integrated yet.
+Qwen project mutation, Hermes execution, 9Router, PWA, connectors, sandbox execution,
+Review/Apply/Discard, and production actions are intentionally not integrated yet.

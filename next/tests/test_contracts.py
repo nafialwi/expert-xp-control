@@ -53,9 +53,9 @@ class XPNextContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             snapshot = status(Path(tmp) / "xp-home")
         self.assertEqual(snapshot["product"], "XP Next")
-        self.assertEqual(snapshot["phase"], "CP-03A")
+        self.assertEqual(snapshot["phase"], "CP-04A")
         self.assertEqual(snapshot["runtime"], "LOCAL_STATE_ACTIVE")
-        self.assertEqual(snapshot["ai"], "NOT_INTEGRATED")
+        self.assertEqual(snapshot["ai"], "LOCAL_READ_ONLY_ADAPTER")
         self.assertEqual(snapshot["worker"], "NOT_INTEGRATED")
         self.assertFalse(snapshot["network_required"])
 
