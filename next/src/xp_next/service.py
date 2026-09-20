@@ -11,6 +11,7 @@ from .project_service import ProjectService
 from .local_qwen import LocalQwenAdapter
 from .planner import BoundedReadOnlyPlanner, verify_plan
 from .reasoning import ReasoningRequest, ReasoningResult, ReasoningStatus, compact_reasoning_context
+from .sandbox_review import VerifierSpec, build_review_bundle
 from .runtime import XPRuntime
 from .task_contract import TaskIntent, TaskIntentKind
 
@@ -29,7 +30,7 @@ def status(home: Path | str | None = None) -> dict[str, object]:
         return {
             "product": "XP Next",
             "version": __version__,
-            "phase": "CP-05A",
+            "phase": "CP-06A",
             "runtime": "LOCAL_STATE_ACTIVE",
             "ai": "LOCAL_READ_ONLY_ADAPTER",
             "worker": "LOCAL_HERMES_ISOLATED_ADAPTER",
@@ -193,4 +194,21 @@ def build_read_only_plan(
         "reasoning": reasoning_bundle,
         "plan": plan.as_dict(),
         "verification": {"ok": ok, "detail": detail},
+    }
+
+
+def review_sandbox(
+    project_root: Path | str,
+    *,
+    verifier_specs: tuple[VerifierSpec, ...] = (),
+    max_diff_chars: int = 12_000,
+) -> dict[str, object]:
+    bundle = build_review_bundle(
+        project_root,
+        verifier_specs=verifier_specs,
+        max_diff_chars=max_diff_chars,
+    )
+    return {
+        "bundle": bundle.as_dict(),
+        "human_review": bundle.render_text(),
     }
