@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+set -u
+
+ENV_FILE="${XP_AGENT_ENV_FILE:-$HOME/.config/xp-agents/pc-main.env}"
+
+if [ ! -r "$ENV_FILE" ]; then
+  echo "Missing agent config: $ENV_FILE" >&2
+  exit 1
+fi
+
+set -a
+. "$ENV_FILE"
+set +a
+
+STATE_DIR="$HOME/.local/state/xp-pc-agent"
+mkdir -p "$STATE_DIR"
+LOG="$STATE_DIR/agent.log"
+
+log() {
+  printf '[%s] %s\n' "$(date '+%F %T')" "$*" >> "$LOG"
+}
+
+api_post() {
+  local rpc="$1"
+  local body="$2"
+
+  curl -sS \
+    --connect-timeout 10 \
+    --max-time 30 \
+    -X POST \
+    "$SUPABASE_URL/rest/v1/rpc/$rpc" \
+    -H "apikey: $SUPABASE_KEY" \
+    -H "Authorization: Bearer $SUPABASE_KEY" \
+    -H "x-agent-token: $AGENT_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$body"
+}
+
+finish_job() {
+  local id="$1"
+  local rc="$2"
+  local stdout="$3"
+  local stderr="$4"
+
+  local body
+  body="$(jq -nc \
+    --arg agent "$AGENT_ID" \
+    --arg id "$id" \
+    --argjson rc "$rc" \
+    --arg stdout "$stdout" \
+    --arg stderr "$stderr" \
+    '{
+      p_agent_id:$agent,
+      p_job_id:$id,
+      p_return_code:$rc,
+      p_stdout:$stdout,
+      p_stderr:$stderr
+    }')"
+
+  api_post xp_finish_job_v2 "$body" >/dev/null 2>&1 || true
+}
+
+ROOT="$(realpath -m "$WORKSPACE_ROOT")"
+
+log "START agent=$AGENT_ID root=$ROOT"
+
+while true; do
+  CLAIM_BODY="$(jq -nc \
+    --arg agent "$AGENT_ID" \
+    '{p_agent_id:$agent,p_lease_seconds:1800}')"
+
+  RESPONSE="$(api_post xp_claim_job_v2 "$CLAIM_BODY" 2>>"$LOG" || true)"
+
+  if [ -z "$RESPONSE" ]; then
+    sleep 3
+    continue
+  fi
+
+  if ! printf '%s' "$RESPONSE" | jq -e 'type == "array"' >/dev/null 2>&1; then
+    sleep 5
+    continue
+  fi
+
+  COUNT="$(printf '%s' "$RESPONSE" | jq 'length')"
+
+  if [ "$COUNT" -eq 0 ]; then
+    sleep 2
+    continue
+  fi
+
+  JOB="$(printf '%s' "$RESPONSE" | jq '.[0]')"
+
+  ID="$(printf '%s' "$JOB" | jq -r '.id')"
+  PROJECT="$(printf '%s' "$JOB" | jq -r '.project')"
+  CWD="$(printf '%s' "$JOB" | jq -r '.cwd // empty')"
+  CMD="$(printf '%s' "$JOB" | jq -r '.command')"
+  RISK="$(printf '%s' "$JOB" | jq -r '.risk // "safe"')"
+  TIMEOUT_S="$(printf '%s' "$JOB" | jq -r '.timeout_seconds // 300')"
+
+  if [ -z "$CWD" ]; then
+    finish_job "$ID" 126 "" "Missing cwd"
+    continue
+  fi
+
+  RESOLVED="$(realpath -m "$CWD")"
+
+  case "$RESOLVED" in
+    "$ROOT"|"$ROOT"/*)
+      ;;
+    *)
+      log "REJECT id=$ID cwd=$RESOLVED outside root"
+      finish_job "$ID" 126 "" "Rejected cwd outside WORKSPACE_ROOT"
+      continue
+      ;;
+  esac
+
+  if [ "$RISK" = "deploy" ] && [ "${XP_ALLOW_DEPLOY:-0}" != "1" ]; then
+    log "BLOCK DEPLOY id=$ID project=$PROJECT"
+    finish_job "$ID" 126 "" "DEPLOY blocked locally"
+    continue
+  fi
+
+  OUT="$(mktemp)"
+  ERR="$(mktemp)"
+
+  log "RUN id=$ID project=$PROJECT risk=$RISK cwd=$RESOLVED"
+
+  (
+    cd "$RESOLVED" || exit 125
+    timeout "${TIMEOUT_S}s" bash -lc "$CMD"
+  ) >"$OUT" 2>"$ERR"
+
+  RC=$?
+
+  STDOUT="$(tail -c 180000 "$OUT" 2>/dev/null | tr -d '\000' || true)"
+  STDERR="$(tail -c 180000 "$ERR" 2>/dev/null | tr -d '\000' || true)"
+
+  finish_job "$ID" "$RC" "$STDOUT" "$STDERR"
+
+  log "DONE id=$ID rc=$RC"
+
+  rm -f "$OUT" "$ERR"
+done
