@@ -72,7 +72,7 @@ class ProjectServiceTests(unittest.TestCase):
                 service.register("p1", "One", project, source_kind="local")
                 service.switch("p1")
             snapshot = status(home)
-            self.assertEqual(snapshot["phase"], "CP-08D")
+            self.assertEqual(snapshot["phase"], "CP-08E")
             self.assertEqual(snapshot["runtime"], "LOCAL_STATE_ACTIVE")
             self.assertEqual(snapshot["database"], "READY")
             self.assertEqual(snapshot["project_count"], 1)

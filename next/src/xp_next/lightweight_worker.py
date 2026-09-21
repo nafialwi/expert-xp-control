@@ -83,6 +83,44 @@ def _bounded_text(value: object, label: str) -> str:
     return value
 
 
+
+def validate_lightweight_operation_prompt(prompt: str) -> tuple[bool, str]:
+    """Validate only the explicit operation shape; no filesystem state is read."""
+    try:
+        payload = json.loads(prompt)
+    except json.JSONDecodeError:
+        return False, "lightweight operation must be an explicit JSON object"
+    if not isinstance(payload, dict):
+        return False, "lightweight operation payload must be a JSON object"
+
+    operation = payload.get("operation")
+    if operation == "replace_text":
+        allowed_keys = {"operation", "path", "expected_text", "new_text"}
+        required_keys = allowed_keys
+    elif operation == "create_text":
+        allowed_keys = {"operation", "path", "new_text"}
+        required_keys = allowed_keys
+    else:
+        return False, "unsupported lightweight operation"
+
+    missing = required_keys - set(payload)
+    if missing:
+        return False, f"missing lightweight fields: {', '.join(sorted(missing))}"
+    unknown = set(payload) - allowed_keys
+    if unknown:
+        return False, f"unknown lightweight fields: {', '.join(sorted(unknown))}"
+
+    try:
+        _safe_relative_path(payload.get("path"))
+        _bounded_text(payload.get("new_text"), "new_text")
+        if operation == "replace_text":
+            _bounded_text(payload.get("expected_text"), "expected_text")
+    except LightweightWorkerError as exc:
+        return False, str(exc)
+
+    return True, str(operation)
+
+
 class LightweightLocalWorker:
     """Deterministic sandbox-only file worker for explicit bounded operations."""
 
