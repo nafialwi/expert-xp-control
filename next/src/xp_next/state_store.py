@@ -192,3 +192,162 @@ class StateStore:
                     "job state changed concurrently; retry from fresh state"
                 )
         return self.get_job(job_id)
+
+    def record_approval(
+        self,
+        approval_id: str,
+        *,
+        job_id: str,
+        approval_class: str,
+        granted: bool,
+    ) -> dict[str, object]:
+        if not approval_id.strip() or not approval_class.strip():
+            raise ValueError("approval id and class must not be empty")
+        self.get_job(job_id)
+        now = _utc_now()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO approvals(id, job_id, approval_class, granted, created_at)
+                VALUES(?,?,?,?,?)
+                """,
+                (
+                    approval_id.strip(),
+                    job_id,
+                    approval_class.strip(),
+                    1 if granted else 0,
+                    now,
+                ),
+            )
+        row = self.connection.execute(
+            "SELECT * FROM approvals WHERE id=?",
+            (approval_id.strip(),),
+        ).fetchone()
+        result = _as_dict(row)
+        assert result is not None
+        return result
+
+    def list_approvals(self, job_id: str) -> list[dict[str, object]]:
+        self.get_job(job_id)
+        rows = self.connection.execute(
+            "SELECT * FROM approvals WHERE job_id=? ORDER BY created_at, id",
+            (job_id,),
+        ).fetchall()
+        return [result for row in rows if (result := _as_dict(row)) is not None]
+
+    def record_activity(
+        self,
+        activity_id: str,
+        *,
+        job_id: str | None,
+        category: str,
+        action: str,
+        status: str,
+        summary: str,
+        source: str | None = None,
+        processor: str | None = None,
+        live: bool = False,
+    ) -> dict[str, object]:
+        values = (activity_id, category, action, status, summary)
+        if any(not value.strip() for value in values):
+            raise ValueError("activity id/category/action/status/summary must not be empty")
+        if job_id is not None:
+            self.get_job(job_id)
+        now = _utc_now()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO activities(
+                    id, job_id, category, action, status, summary,
+                    source, processor, live, created_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    activity_id.strip(),
+                    job_id,
+                    category.strip(),
+                    action.strip(),
+                    status.strip(),
+                    summary.strip(),
+                    source,
+                    processor,
+                    1 if live else 0,
+                    now,
+                ),
+            )
+        row = self.connection.execute(
+            "SELECT * FROM activities WHERE id=?",
+            (activity_id.strip(),),
+        ).fetchone()
+        result = _as_dict(row)
+        assert result is not None
+        return result
+
+    def list_activities(self, job_id: str) -> list[dict[str, object]]:
+        self.get_job(job_id)
+        rows = self.connection.execute(
+            "SELECT * FROM activities WHERE job_id=? ORDER BY created_at, id",
+            (job_id,),
+        ).fetchall()
+        return [result for row in rows if (result := _as_dict(row)) is not None]
+
+    def record_recovery_point(
+        self,
+        recovery_id: str,
+        *,
+        project_id: str,
+        source_ref: str,
+        job_id: str | None = None,
+    ) -> dict[str, object]:
+        if not recovery_id.strip() or not source_ref.strip():
+            raise ValueError("recovery id and source_ref must not be empty")
+        self.get_project(project_id)
+        if job_id is not None:
+            job = self.get_job(job_id)
+            if str(job["project_id"]) != project_id:
+                raise ValueError("recovery job belongs to another project")
+        now = _utc_now()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO recovery_points(id, project_id, job_id, source_ref, created_at)
+                VALUES(?,?,?,?,?)
+                """,
+                (
+                    recovery_id.strip(),
+                    project_id,
+                    job_id,
+                    source_ref.strip(),
+                    now,
+                ),
+            )
+        row = self.connection.execute(
+            "SELECT * FROM recovery_points WHERE id=?",
+            (recovery_id.strip(),),
+        ).fetchone()
+        result = _as_dict(row)
+        assert result is not None
+        return result
+
+    def list_recovery_points(
+        self,
+        *,
+        project_id: str | None = None,
+        job_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        clauses: list[str] = []
+        params: list[str] = []
+        if project_id is not None:
+            self.get_project(project_id)
+            clauses.append("project_id=?")
+            params.append(project_id)
+        if job_id is not None:
+            self.get_job(job_id)
+            clauses.append("job_id=?")
+            params.append(job_id)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self.connection.execute(
+            f"SELECT * FROM recovery_points{where} ORDER BY created_at, id",
+            tuple(params),
+        ).fetchall()
+        return [result for row in rows if (result := _as_dict(row)) is not None]

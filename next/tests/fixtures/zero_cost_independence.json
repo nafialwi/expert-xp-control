@@ -12,12 +12,15 @@
   "required_flow": [
     "resolve_project",
     "inspect_context",
+    "local_qwen_reasoning",
     "build_bounded_plan",
     "request_write_approval",
     "execute_in_sandbox",
     "run_verifier",
     "present_review",
-    "apply_or_discard"
+    "apply_or_discard",
+    "post_apply_verify",
+    "complete_job_state"
   ],
   "forbidden_dependencies": [
     "WAITING_GPT",

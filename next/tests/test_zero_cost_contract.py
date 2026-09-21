@@ -21,8 +21,12 @@ class ZeroCostIndependenceContractTests(unittest.TestCase):
     def test_fixture_requires_review_before_apply_or_discard(self):
         data = json.loads(FIXTURE.read_text(encoding="utf-8"))
         flow = data["required_flow"]
+        self.assertLess(flow.index("inspect_context"), flow.index("local_qwen_reasoning"))
+        self.assertLess(flow.index("local_qwen_reasoning"), flow.index("build_bounded_plan"))
         self.assertLess(flow.index("run_verifier"), flow.index("present_review"))
         self.assertLess(flow.index("present_review"), flow.index("apply_or_discard"))
+        self.assertLess(flow.index("apply_or_discard"), flow.index("post_apply_verify"))
+        self.assertLess(flow.index("post_apply_verify"), flow.index("complete_job_state"))
 
 if __name__ == "__main__":
     unittest.main()
