@@ -135,7 +135,8 @@ class LocalQwenAdapter:
             f"{request.task.goal}\n\n"
             "BOUNDED_PROJECT_CONTEXT_JSON:\n"
             f"{context_json}\n\n"
-            "Return only a concise answer supported by the supplied context. "
+            "Return 1-3 concise plain-text sentences supported by the supplied context. "
+            "Do not return JSON, code, or repeated filler tokens. "
             "Do not expose hidden chain-of-thought. "
             "Do not claim to have modified files or used external network access."
         )

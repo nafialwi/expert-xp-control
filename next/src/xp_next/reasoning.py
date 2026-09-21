@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from enum import Enum
 import json
+import re
 
 from .task_contract import TaskIntent
 
@@ -95,6 +96,52 @@ class ReasoningResult:
         return data
 
 
+def assess_reasoning_quality(output: str) -> tuple[bool, str]:
+    """Reject obviously unusable local-model output without judging truth."""
+    text = output.strip()
+    if not text:
+        return False, "empty reasoning output"
+
+    if any(ord(ch) < 32 and ch not in "\n\r\t" for ch in text):
+        return False, "reasoning output contains control-character noise"
+
+    visible = [ch for ch in text if not ch.isspace()]
+    if len(visible) >= 24:
+        structural_noise = sum(ch in '{}[]\"\'' for ch in visible) / len(visible)
+        if structural_noise > 0.18:
+            return False, "reasoning output contains excessive structured-symbol noise"
+
+    if len(visible) >= 40:
+        alnum_ratio = sum(ch.isalnum() for ch in visible) / len(visible)
+        if alnum_ratio < 0.35:
+            return False, "reasoning output is dominated by non-semantic symbols"
+
+    tokens = re.findall(r"\w+", text.casefold(), flags=re.UNICODE)
+    if len(tokens) >= 8:
+        unique_ratio = len(set(tokens)) / len(tokens)
+        if unique_ratio < 0.30:
+            return False, "reasoning output has excessive token repetition"
+
+        counts: dict[str, int] = {}
+        for token in tokens:
+            counts[token] = counts.get(token, 0) + 1
+        if max(counts.values()) / len(tokens) > 0.45:
+            return False, "reasoning output is dominated by one repeated token"
+
+        run = 1
+        longest_run = 1
+        for previous, current in zip(tokens, tokens[1:]):
+            if current == previous:
+                run += 1
+                longest_run = max(longest_run, run)
+            else:
+                run = 1
+        if longest_run >= 4:
+            return False, "reasoning output contains a repeated-token loop"
+
+    return True, "PASS"
+
+
 def verify_reasoning_result(result: ReasoningResult) -> tuple[bool, str]:
     if result.external_network_used:
         return False, "external network use is forbidden"
@@ -108,4 +155,4 @@ def verify_reasoning_result(result: ReasoningResult) -> tuple[bool, str]:
         return False, "empty reasoning output"
     if len(result.output) > 20000:
         return False, "reasoning output exceeds bounded size"
-    return True, "PASS"
+    return assess_reasoning_quality(result.output)

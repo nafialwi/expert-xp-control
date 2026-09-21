@@ -8,6 +8,7 @@ from xp_next.reasoning import (
     ReasoningStatus,
     ReasoningContractError,
     verify_reasoning_result,
+    assess_reasoning_quality,
     compact_reasoning_context,
 )
 from xp_next.task_contract import TaskIntent, TaskIntentKind
@@ -98,6 +99,47 @@ class ReasoningContractTests(unittest.TestCase):
         ok, _ = verify_reasoning_result(result)
         self.assertFalse(ok)
 
+
+
+    def test_quality_gate_accepts_short_useful_plain_text(self):
+        ok, detail = assess_reasoning_quality("Stack hint: Python project.")
+        self.assertTrue(ok)
+        self.assertEqual(detail, "PASS")
+
+    def test_quality_gate_rejects_repeated_token_loop(self):
+        ok, detail = assess_reasoning_quality("in in in in in in in in in in in in")
+        self.assertFalse(ok)
+        self.assertIn("repetition", detail)
+
+    def test_quality_gate_rejects_symbol_dominated_noise(self):
+        ok, detail = assess_reasoning_quality(
+            "{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{ \" \" \" :: ,, [] }} }} abc"
+        )
+        self.assertFalse(ok)
+        self.assertIn("structured-symbol", detail)
+
+    def test_quality_gate_rejects_observed_fragmented_qwen_shape(self):
+        observed = (
+            '\"projectid\"\"in \"ne,\" \" \"\"\"ne\"{'
+            '\"ne\"inside\"l\"ne\" \"in\"l戒\"l\"ne\"l'
+            '\"ne\" \"l\"ne\" \"in\"l\"'
+        )
+        ok, detail = assess_reasoning_quality(observed)
+        self.assertFalse(ok)
+        self.assertIn("structured-symbol", detail)
+
+    def test_verifier_rejects_completed_but_pathological_output(self):
+        result = ReasoningResult(
+            status=ReasoningStatus.COMPLETED,
+            output="token token token token token token token token token token",
+            backend_id="local_qwen",
+            model="local",
+            transport="loopback_http",
+            external_network_used=False,
+        )
+        ok, detail = verify_reasoning_result(result)
+        self.assertFalse(ok)
+        self.assertIn("repetition", detail)
 
 if __name__ == "__main__":
     unittest.main()

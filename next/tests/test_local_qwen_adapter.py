@@ -92,5 +92,25 @@ class LocalQwenAdapterTests(unittest.TestCase):
         self.assertIn("connection refused", result.detail)
 
 
+
+    def test_pathological_model_output_becomes_needs_attention(self):
+        def request_json(method, url, payload, timeout):
+            return {
+                "model": "local",
+                "choices": [
+                    {"message": {"content": "in in in in in in in in in in"}}
+                ],
+            }
+
+        adapter = LocalQwenAdapter(
+            base_url="http://127.0.0.1:8080",
+            model="local",
+            request_json=request_json,
+        )
+        result = adapter.reason(self._request())
+        self.assertEqual(result.status, ReasoningStatus.NEEDS_ATTENTION)
+        self.assertEqual(result.output, "")
+        self.assertIn("repetition", result.detail)
+
 if __name__ == "__main__":
     unittest.main()
