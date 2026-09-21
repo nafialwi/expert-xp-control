@@ -148,3 +148,124 @@ class WorkerSelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkerConfirmationTests(unittest.TestCase):
+    def setUp(self):
+        from xp_next.worker_selection import confirm_worker_selection
+        self.confirm = confirm_worker_selection
+        self.selector = WorkerSelector(
+            {
+                "lightweight_local": LightweightLocalWorker(),
+                "hermes": FakeHermes(ready=True),
+            }
+        )
+        self.resources = ResourceSnapshot(
+            available_memory_mb=8192,
+            logical_cpus=8,
+        )
+        self.prompt = json.dumps(
+            {
+                "operation": "replace_text",
+                "path": "app.txt",
+                "expected_text": "SAFE\n",
+                "new_text": "CHANGED\n",
+            }
+        )
+        self.request = WorkerSelectionRequest(worker_prompt=self.prompt)
+        self.selection = self.selector.select(
+            self.request,
+            resources=self.resources,
+        )
+
+    def test_visible_recommendation_can_be_human_confirmed_with_fresh_recheck(self):
+        from xp_next.worker_selection import (
+            ConfirmationStatus,
+            HumanWorkerConfirmation,
+        )
+        result = self.confirm(
+            self.selector,
+            selection=self.selection,
+            request=self.request,
+            confirmation=HumanWorkerConfirmation(
+                backend_id="lightweight_local",
+                approved=True,
+            ),
+            resources=self.resources,
+        )
+        self.assertEqual(result.status, ConfirmationStatus.CONFIRMED)
+        self.assertEqual(result.backend_id, "lightweight_local")
+
+    def test_confirmation_backend_must_match_visible_recommendation(self):
+        from xp_next.worker_selection import (
+            ConfirmationStatus,
+            HumanWorkerConfirmation,
+        )
+        result = self.confirm(
+            self.selector,
+            selection=self.selection,
+            request=self.request,
+            confirmation=HumanWorkerConfirmation(
+                backend_id="hermes",
+                approved=True,
+            ),
+            resources=self.resources,
+        )
+        self.assertEqual(result.status, ConfirmationStatus.NEEDS_ATTENTION)
+        self.assertIsNone(result.backend_id)
+        self.assertIn("does not match visible selection", result.detail)
+
+    def test_declined_recommendation_is_not_bound(self):
+        from xp_next.worker_selection import (
+            ConfirmationStatus,
+            HumanWorkerConfirmation,
+        )
+        result = self.confirm(
+            self.selector,
+            selection=self.selection,
+            request=self.request,
+            confirmation=HumanWorkerConfirmation(
+                backend_id="lightweight_local",
+                approved=False,
+            ),
+            resources=self.resources,
+        )
+        self.assertEqual(result.status, ConfirmationStatus.DECLINED)
+        self.assertIsNone(result.backend_id)
+
+    def test_confirmation_fails_if_resource_state_no_longer_allows_worker(self):
+        from xp_next.worker_selection import (
+            ConfirmationStatus,
+            HumanWorkerConfirmation,
+        )
+        hermes_request = WorkerSelectionRequest(worker_prompt="agentic task")
+        hermes_selection = self.selector.select(
+            hermes_request,
+            resources=self.resources,
+        )
+        self.assertEqual(hermes_selection.backend_id, "hermes")
+        result = self.confirm(
+            self.selector,
+            selection=hermes_selection,
+            request=hermes_request,
+            confirmation=HumanWorkerConfirmation(
+                backend_id="hermes",
+                approved=True,
+            ),
+            resources=ResourceSnapshot(
+                available_memory_mb=1024,
+                logical_cpus=8,
+            ),
+        )
+        self.assertEqual(result.status, ConfirmationStatus.NEEDS_ATTENTION)
+        self.assertIsNone(result.backend_id)
+        self.assertIn("fresh readiness/resource validation", result.detail)
+
+    def test_nonhuman_confirmation_is_rejected(self):
+        from xp_next.worker_selection import HumanWorkerConfirmation
+        with self.assertRaises(ValueError):
+            HumanWorkerConfirmation(
+                backend_id="lightweight_local",
+                approved=True,
+                reviewer="automatic",
+            )

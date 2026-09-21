@@ -21,6 +21,11 @@ from .sandbox_review import ReviewBundle, ReviewStatus, VerifierSpec, build_revi
 from .state_store import StateStore
 from .task_contract import TaskIntent, TaskIntentKind
 from .worker_contract import WorkerRequest, WorkerStatus
+from .worker_selection import (
+    ConfirmationStatus,
+    WorkerConfirmation,
+    WorkerSelection,
+)
 
 
 class ReviewAction(str, Enum):
@@ -164,7 +169,13 @@ class ZeroCostE2EService:
         sandbox_write_approval: HumanApproval,
         review_decider: ReviewDecider,
         max_reasoning_tokens: int = 96,
+        worker_selection: WorkerSelection | None = None,
+        worker_confirmation: WorkerConfirmation | None = None,
     ) -> ZeroCostE2EResult:
+        if (worker_selection is None) != (worker_confirmation is None):
+            raise ValueError(
+                "worker_selection and worker_confirmation must be supplied together"
+            )
         if not verifier_specs:
             raise ValueError("CP-08A requires at least one explicit verifier")
         if not worker_prompt.strip():
@@ -176,10 +187,121 @@ class ZeroCostE2EService:
         self.store.create_job(job_id, project_id, goal, risk="write")
         self.store.transition_job(job_id, JobState.PLANNING)
 
+        expected_worker_backend: str | None = None
+        if worker_selection is not None and worker_confirmation is not None:
+            selection_backend = worker_selection.backend_id or "none"
+            resources = worker_selection.resource_snapshot
+            self.store.record_activity(
+                f"{job_id}:activity:worker-selection",
+                job_id=job_id,
+                category="worker_selection",
+                action="recommend_worker",
+                status=(
+                    "Selesai"
+                    if worker_selection.backend_id is not None
+                    else "Perlu perhatian"
+                ),
+                summary=(
+                    f"{worker_selection.status.value}: backend={selection_backend}; "
+                    f"{worker_selection.detail}; "
+                    f"memory_mb={resources.available_memory_mb}; "
+                    f"logical_cpus={resources.logical_cpus}"
+                ),
+                source="local_resource_and_capability_policy",
+                processor="xp_next_worker_selector",
+                live=False,
+            )
+
+            confirmed = worker_confirmation.status is ConfirmationStatus.CONFIRMED
+            self.store.record_approval(
+                f"{job_id}:approval:worker",
+                job_id=job_id,
+                approval_class="worker_selection",
+                granted=confirmed,
+            )
+            self.store.record_activity(
+                f"{job_id}:activity:worker-confirmation",
+                job_id=job_id,
+                category="approval",
+                action="confirm_worker",
+                status=(
+                    "Selesai"
+                    if confirmed
+                    else (
+                        "Gagal"
+                        if worker_confirmation.status is ConfirmationStatus.DECLINED
+                        else "Perlu perhatian"
+                    )
+                ),
+                summary=worker_confirmation.detail,
+                source="human",
+                processor="xp_next_worker_selector",
+                live=False,
+            )
+
+            if worker_confirmation.status is ConfirmationStatus.DECLINED:
+                self.store.transition_job(job_id, JobState.CANCELLED)
+                return self._result(
+                    job_id=job_id,
+                    reasoning_status="NOT_RUN",
+                    plan_status="NOT_RUN",
+                    worker_status="NOT_RUN",
+                    review_status=None,
+                    apply_status=None,
+                    sandbox_root=None,
+                    recovery_ref=None,
+                )
+            if (
+                worker_confirmation.status is not ConfirmationStatus.CONFIRMED
+                or worker_confirmation.backend_id is None
+                or worker_selection.backend_id != worker_confirmation.backend_id
+            ):
+                self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
+                return self._result(
+                    job_id=job_id,
+                    reasoning_status="NOT_RUN",
+                    plan_status="NOT_RUN",
+                    worker_status="NOT_RUN",
+                    review_status=None,
+                    apply_status=None,
+                    sandbox_root=None,
+                    recovery_ref=None,
+                )
+            expected_worker_backend = worker_confirmation.backend_id
+
         task = TaskIntent.read_only(goal=goal, kind=TaskIntentKind.ANALYZE)
 
         qwen_ready = self.reasoner.readiness()
         worker_ready = self.worker.readiness()
+        if (
+            expected_worker_backend is not None
+            and worker_ready.backend_id != expected_worker_backend
+        ):
+            self.store.record_activity(
+                f"{job_id}:activity:worker-binding",
+                job_id=job_id,
+                category="worker_selection",
+                action="bind_confirmed_worker",
+                status="Perlu perhatian",
+                summary=(
+                    f"confirmed backend {expected_worker_backend} does not match "
+                    f"runtime worker {worker_ready.backend_id}; execution blocked"
+                ),
+                source="local",
+                processor="xp_next_worker_selector",
+                live=False,
+            )
+            self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
+            return self._result(
+                job_id=job_id,
+                reasoning_status="NOT_RUN",
+                plan_status="NOT_RUN",
+                worker_status="NOT_RUN",
+                review_status=None,
+                apply_status=None,
+                sandbox_root=None,
+                recovery_ref=None,
+            )
         worker_backend = str(getattr(worker_ready, "backend_id", "worker"))
         capabilities = {
             "local_qwen": {
@@ -228,6 +350,22 @@ class ZeroCostE2EService:
                 apply_status=None,
                 sandbox_root=None,
                 recovery_ref=None,
+            )
+
+        if expected_worker_backend is not None:
+            self.store.record_activity(
+                f"{job_id}:activity:worker-binding",
+                job_id=job_id,
+                category="worker_selection",
+                action="bind_confirmed_worker",
+                status="Selesai",
+                summary=(
+                    f"runtime worker identity matches confirmed backend "
+                    f"{expected_worker_backend}; no fallback permitted"
+                ),
+                source="local",
+                processor="xp_next_worker_selector",
+                live=False,
             )
 
         context = self.projects.context(

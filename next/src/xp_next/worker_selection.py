@@ -301,3 +301,110 @@ class WorkerSelector:
             considered_backends=considered,
             resource_snapshot=resources,
         )
+
+
+class ConfirmationStatus(str, Enum):
+    CONFIRMED = "CONFIRMED"
+    DECLINED = "DECLINED"
+    NEEDS_ATTENTION = "NEEDS_ATTENTION"
+
+
+@dataclass(frozen=True)
+class HumanWorkerConfirmation:
+    backend_id: str
+    approved: bool
+    reviewer: str = "human"
+
+    def __post_init__(self) -> None:
+        if not self.backend_id.strip():
+            raise WorkerSelectionError("confirmation backend_id must not be empty")
+        if self.reviewer != "human":
+            raise WorkerSelectionError(
+                "worker confirmation must come from an explicit human reviewer"
+            )
+
+
+@dataclass(frozen=True)
+class WorkerConfirmation:
+    status: ConfirmationStatus
+    backend_id: str | None
+    detail: str
+    resource_snapshot: ResourceSnapshot
+    selection_status: SelectionStatus
+
+    def as_dict(self) -> dict[str, object]:
+        data = asdict(self)
+        data["status"] = self.status.value
+        data["selection_status"] = self.selection_status.value
+        return data
+
+
+def confirm_worker_selection(
+    selector: WorkerSelector,
+    *,
+    selection: WorkerSelection,
+    request: WorkerSelectionRequest,
+    confirmation: HumanWorkerConfirmation,
+    resources: ResourceSnapshot,
+) -> WorkerConfirmation:
+    """Confirm exactly one visible recommendation and revalidate that backend."""
+
+    if selection.status is SelectionStatus.NEEDS_ATTENTION or selection.backend_id is None:
+        return WorkerConfirmation(
+            status=ConfirmationStatus.NEEDS_ATTENTION,
+            backend_id=None,
+            detail="selection cannot be confirmed because no safe backend was offered",
+            resource_snapshot=resources,
+            selection_status=selection.status,
+        )
+
+    if confirmation.backend_id != selection.backend_id:
+        return WorkerConfirmation(
+            status=ConfirmationStatus.NEEDS_ATTENTION,
+            backend_id=None,
+            detail=(
+                f"confirmation backend {confirmation.backend_id} does not match "
+                f"visible selection {selection.backend_id}; no worker was substituted"
+            ),
+            resource_snapshot=resources,
+            selection_status=selection.status,
+        )
+
+    if not confirmation.approved:
+        return WorkerConfirmation(
+            status=ConfirmationStatus.DECLINED,
+            backend_id=None,
+            detail=f"human declined worker {selection.backend_id}",
+            resource_snapshot=resources,
+            selection_status=selection.status,
+        )
+
+    exact = selector.select(
+        WorkerSelectionRequest(
+            worker_prompt=request.worker_prompt,
+            requested_backend=selection.backend_id,
+        ),
+        resources=resources,
+    )
+    if exact.status is not SelectionStatus.SELECTED or exact.backend_id != selection.backend_id:
+        return WorkerConfirmation(
+            status=ConfirmationStatus.NEEDS_ATTENTION,
+            backend_id=None,
+            detail=(
+                f"confirmed worker {selection.backend_id} failed fresh readiness/resource "
+                f"validation: {exact.detail}"
+            ),
+            resource_snapshot=resources,
+            selection_status=selection.status,
+        )
+
+    return WorkerConfirmation(
+        status=ConfirmationStatus.CONFIRMED,
+        backend_id=selection.backend_id,
+        detail=(
+            f"human confirmed worker {selection.backend_id}; fresh exact-backend "
+            "validation passed"
+        ),
+        resource_snapshot=resources,
+        selection_status=selection.status,
+    )

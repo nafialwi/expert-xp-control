@@ -16,6 +16,15 @@ from xp_next.project_service import ProjectService
 from xp_next.runtime_paths import RuntimePaths
 from xp_next.sandbox_review import ReviewStatus, VerifierSpec
 from xp_next.state_store import StateStore
+from xp_next.worker_contract import WorkerReadiness
+from xp_next.worker_selection import (
+    ConfirmationStatus,
+    HumanWorkerConfirmation,
+    ResourceSnapshot,
+    WorkerSelectionRequest,
+    WorkerSelector,
+    confirm_worker_selection,
+)
 from xp_next.zero_cost_e2e import (
     HumanApproval,
     HumanReviewDecision,
@@ -310,6 +319,295 @@ class ZeroCostE2ETests(unittest.TestCase):
                 processors = {x["processor"] for x in activities}
                 self.assertIn("lightweight_local", processors)
                 self.assertNotIn("hermes", processors)
+
+
+    def test_worker_recommendation_confirmation_binds_exact_backend_in_e2e(self):
+        with tempfile.TemporaryDirectory() as tmp, LoopbackFixtureServer() as server:
+            base = Path(tmp)
+            source = base / "source"
+            init_source(source)
+
+            paths = RuntimePaths.resolve(base / "runtime").ensure()
+            with StateStore(paths.database) as store:
+                projects = ProjectService(store)
+                projects.register(
+                    "fixture-confirmed",
+                    "Fixture Confirmed",
+                    source,
+                    source_kind="git",
+                )
+                worker = LightweightLocalWorker()
+                reasoner = LocalQwenAdapter(
+                    base_url=server.base_url,
+                    model="qwen-fixture-local",
+                    timeout=5,
+                )
+                service = ZeroCostE2EService(
+                    store=store,
+                    projects=projects,
+                    paths=paths,
+                    reasoner=reasoner,
+                    planner=BoundedReadOnlyPlanner(),
+                    worker=worker,
+                )
+                prompt = json.dumps(
+                    {
+                        "operation": "replace_text",
+                        "path": "app.txt",
+                        "expected_text": "SAFE\n",
+                        "new_text": "CHANGED\n",
+                    }
+                )
+                resources = ResourceSnapshot(
+                    available_memory_mb=512,
+                    logical_cpus=2,
+                )
+                selector = WorkerSelector({"lightweight_local": worker})
+                selection_request = WorkerSelectionRequest(worker_prompt=prompt)
+                selection = selector.select(
+                    selection_request,
+                    resources=resources,
+                )
+                confirmation = confirm_worker_selection(
+                    selector,
+                    selection=selection,
+                    request=selection_request,
+                    confirmation=HumanWorkerConfirmation(
+                        backend_id="lightweight_local",
+                        approved=True,
+                    ),
+                    resources=resources,
+                )
+                self.assertEqual(
+                    confirmation.status,
+                    ConfirmationStatus.CONFIRMED,
+                )
+
+                verifier = VerifierSpec(
+                    name="fixture-content",
+                    argv=(
+                        "python",
+                        "-c",
+                        (
+                            "from pathlib import Path; "
+                            "assert Path('app.txt').read_text() == 'CHANGED\\n'"
+                        ),
+                    ),
+                )
+
+                def review(bundle):
+                    return HumanReviewDecision(
+                        action=ReviewAction.APPLY,
+                        approved_change_fingerprint=bundle.change_fingerprint,
+                    )
+
+                result = service.run(
+                    job_id="cp08f-confirmed-e2e",
+                    project_id="fixture-confirmed",
+                    goal="Apply one confirmed bounded local edit.",
+                    worker_prompt=prompt,
+                    verifier_specs=(verifier,),
+                    sandbox_write_approval=HumanApproval(granted=True),
+                    review_decider=review,
+                    worker_selection=selection,
+                    worker_confirmation=confirmation,
+                )
+
+                self.assertEqual(result.job_state, "COMPLETED")
+                self.assertEqual(result.worker_status, "COMPLETED")
+                self.assertEqual((source / "app.txt").read_text(), "CHANGED\n")
+
+                approvals = store.list_approvals("cp08f-confirmed-e2e")
+                worker_approvals = [
+                    x for x in approvals
+                    if x["approval_class"] == "worker_selection"
+                ]
+                self.assertEqual(len(worker_approvals), 1)
+                self.assertEqual(worker_approvals[0]["granted"], 1)
+
+                actions = [
+                    x["action"]
+                    for x in store.list_activities("cp08f-confirmed-e2e")
+                ]
+                self.assertIn("recommend_worker", actions)
+                self.assertIn("confirm_worker", actions)
+                self.assertIn("bind_confirmed_worker", actions)
+                self.assertIn("isolated_lightweight_local", actions)
+                self.assertLess(
+                    actions.index("confirm_worker"),
+                    actions.index("isolated_lightweight_local"),
+                )
+                self.assertLess(
+                    actions.index("bind_confirmed_worker"),
+                    actions.index("isolated_lightweight_local"),
+                )
+
+    def test_declined_worker_confirmation_cancels_before_reasoning_or_execution(self):
+        with tempfile.TemporaryDirectory() as tmp, LoopbackFixtureServer() as server:
+            base = Path(tmp)
+            source = base / "source"
+            init_source(source)
+            paths = RuntimePaths.resolve(base / "runtime").ensure()
+
+            with StateStore(paths.database) as store:
+                projects = ProjectService(store)
+                projects.register("fixture-decline", "Fixture Decline", source, source_kind="git")
+                worker = LightweightLocalWorker()
+                selector = WorkerSelector({"lightweight_local": worker})
+                prompt = json.dumps(
+                    {
+                        "operation": "replace_text",
+                        "path": "app.txt",
+                        "expected_text": "SAFE\n",
+                        "new_text": "CHANGED\n",
+                    }
+                )
+                resources = ResourceSnapshot(available_memory_mb=512, logical_cpus=2)
+                request = WorkerSelectionRequest(worker_prompt=prompt)
+                selection = selector.select(request, resources=resources)
+                confirmation = confirm_worker_selection(
+                    selector,
+                    selection=selection,
+                    request=request,
+                    confirmation=HumanWorkerConfirmation(
+                        backend_id="lightweight_local",
+                        approved=False,
+                    ),
+                    resources=resources,
+                )
+                self.assertEqual(confirmation.status, ConfirmationStatus.DECLINED)
+
+                service = ZeroCostE2EService(
+                    store=store,
+                    projects=projects,
+                    paths=paths,
+                    reasoner=LocalQwenAdapter(
+                        base_url=server.base_url,
+                        model="qwen-fixture-local",
+                        timeout=5,
+                    ),
+                    planner=BoundedReadOnlyPlanner(),
+                    worker=worker,
+                )
+                verifier = VerifierSpec(
+                    name="never-run",
+                    argv=("python", "-c", "raise SystemExit(99)"),
+                )
+                result = service.run(
+                    job_id="cp08f-declined",
+                    project_id="fixture-decline",
+                    goal="Do not execute after worker decline.",
+                    worker_prompt=prompt,
+                    verifier_specs=(verifier,),
+                    sandbox_write_approval=HumanApproval(granted=True),
+                    review_decider=lambda bundle: (_ for _ in ()).throw(
+                        AssertionError("review must not run")
+                    ),
+                    worker_selection=selection,
+                    worker_confirmation=confirmation,
+                )
+                self.assertEqual(result.job_state, "CANCELLED")
+                self.assertEqual(result.reasoning_status, "NOT_RUN")
+                self.assertEqual(result.worker_status, "NOT_RUN")
+                self.assertEqual((source / "app.txt").read_text(), "SAFE\n")
+                actions = [
+                    x["action"] for x in store.list_activities("cp08f-declined")
+                ]
+                self.assertEqual(actions, ["recommend_worker", "confirm_worker"])
+
+    def test_confirmed_backend_mismatch_blocks_runtime_worker_without_fallback(self):
+        class MismatchedWorker:
+            def readiness(self):
+                return WorkerReadiness(
+                    ready=True,
+                    status="READY",
+                    detail="fixture mismatched worker",
+                    backend_id="hermes",
+                    model_transport="loopback_http",
+                    containment="fixture",
+                )
+
+            def run(self, *args, **kwargs):
+                raise AssertionError("mismatched worker must never execute")
+
+        with tempfile.TemporaryDirectory() as tmp, LoopbackFixtureServer() as server:
+            base = Path(tmp)
+            source = base / "source"
+            init_source(source)
+            paths = RuntimePaths.resolve(base / "runtime").ensure()
+
+            with StateStore(paths.database) as store:
+                projects = ProjectService(store)
+                projects.register(
+                    "fixture-mismatch",
+                    "Fixture Mismatch",
+                    source,
+                    source_kind="git",
+                )
+                light = LightweightLocalWorker()
+                selector = WorkerSelector({"lightweight_local": light})
+                prompt = json.dumps(
+                    {
+                        "operation": "replace_text",
+                        "path": "app.txt",
+                        "expected_text": "SAFE\n",
+                        "new_text": "CHANGED\n",
+                    }
+                )
+                resources = ResourceSnapshot(available_memory_mb=512, logical_cpus=2)
+                request = WorkerSelectionRequest(worker_prompt=prompt)
+                selection = selector.select(request, resources=resources)
+                confirmation = confirm_worker_selection(
+                    selector,
+                    selection=selection,
+                    request=request,
+                    confirmation=HumanWorkerConfirmation(
+                        backend_id="lightweight_local",
+                        approved=True,
+                    ),
+                    resources=resources,
+                )
+
+                service = ZeroCostE2EService(
+                    store=store,
+                    projects=projects,
+                    paths=paths,
+                    reasoner=LocalQwenAdapter(
+                        base_url=server.base_url,
+                        model="qwen-fixture-local",
+                        timeout=5,
+                    ),
+                    planner=BoundedReadOnlyPlanner(),
+                    worker=MismatchedWorker(),
+                )
+                result = service.run(
+                    job_id="cp08f-mismatch",
+                    project_id="fixture-mismatch",
+                    goal="Block a runtime backend mismatch.",
+                    worker_prompt=prompt,
+                    verifier_specs=(
+                        VerifierSpec(
+                            name="never-run",
+                            argv=("python", "-c", "raise SystemExit(99)"),
+                        ),
+                    ),
+                    sandbox_write_approval=HumanApproval(granted=True),
+                    review_decider=lambda bundle: (_ for _ in ()).throw(
+                        AssertionError("review must not run")
+                    ),
+                    worker_selection=selection,
+                    worker_confirmation=confirmation,
+                )
+                self.assertEqual(result.job_state, "NEEDS_ATTENTION")
+                self.assertEqual(result.worker_status, "NOT_RUN")
+                self.assertEqual((source / "app.txt").read_text(), "SAFE\n")
+                activities = store.list_activities("cp08f-mismatch")
+                binding = [
+                    x for x in activities
+                    if x["action"] == "bind_confirmed_worker"
+                ]
+                self.assertEqual(len(binding), 1)
+                self.assertEqual(binding[0]["status"], "Perlu perhatian")
 
     def test_nonhuman_approval_is_rejected(self):
         with self.assertRaises(ValueError):
