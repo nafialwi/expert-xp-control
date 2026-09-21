@@ -179,15 +179,16 @@ class ZeroCostE2EService:
         task = TaskIntent.read_only(goal=goal, kind=TaskIntentKind.ANALYZE)
 
         qwen_ready = self.reasoner.readiness()
-        hermes_ready = self.worker.readiness()
+        worker_ready = self.worker.readiness()
+        worker_backend = str(getattr(worker_ready, "backend_id", "worker"))
         capabilities = {
             "local_qwen": {
                 "state": "READY" if qwen_ready.ready else "NEEDS_ATTENTION",
                 "version": getattr(self.reasoner, "model", None),
                 "network_used": bool(getattr(qwen_ready, "external_network_used", False)),
             },
-            "hermes": {
-                "state": "READY" if hermes_ready.ready else "NEEDS_ATTENTION",
+            worker_backend: {
+                "state": "READY" if worker_ready.ready else "NEEDS_ATTENTION",
                 "version": None,
                 "network_used": False,
             },
@@ -206,7 +207,7 @@ class ZeroCostE2EService:
         if (
             not qwen_ready.ready
             or bool(getattr(qwen_ready, "external_network_used", False))
-            or not hermes_ready.ready
+            or not worker_ready.ready
         ):
             self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
             self._activity(
@@ -215,7 +216,7 @@ class ZeroCostE2EService:
                 category="capability",
                 action="zero_cost_readiness",
                 status="Perlu perhatian",
-                summary="Required local Qwen or Hermes capability is not ready.",
+                summary="Required local Qwen or selected worker capability is not ready.",
                 source="local",
             )
             return self._result(
@@ -345,11 +346,11 @@ class ZeroCostE2EService:
             job_id,
             5,
             category="worker",
-            action="isolated_hermes",
+            action=f"isolated_{worker_backend}",
             status="Selesai" if worker_result.status is WorkerStatus.COMPLETED else "Perlu perhatian",
             summary=worker_result.detail or f"Worker status: {worker_result.status.value}.",
             source="isolated_workspace",
-            processor="hermes",
+            processor=worker_backend,
         )
         if worker_result.status is not WorkerStatus.COMPLETED:
             self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)

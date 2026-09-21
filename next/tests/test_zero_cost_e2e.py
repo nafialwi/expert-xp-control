@@ -10,6 +10,7 @@ import unittest
 
 from xp_next.hermes_worker import HermesLocalWorker
 from xp_next.local_qwen import LocalQwenAdapter
+from xp_next.lightweight_worker import LightweightLocalWorker
 from xp_next.planner import BoundedReadOnlyPlanner
 from xp_next.project_service import ProjectService
 from xp_next.runtime_paths import RuntimePaths
@@ -227,6 +228,88 @@ class ZeroCostE2ETests(unittest.TestCase):
                 self.assertEqual(len(recovery), 1)
                 self.assertEqual(recovery[0]["project_id"], "fixture")
                 self.assertEqual(recovery[0]["source_ref"], result.recovery_ref)
+
+
+    def test_complete_fixture_flow_with_lightweight_worker(self):
+        with tempfile.TemporaryDirectory() as tmp, LoopbackFixtureServer() as server:
+            base = Path(tmp)
+            source = base / "source"
+            original_head = init_source(source)
+
+            paths = RuntimePaths.resolve(base / "runtime").ensure()
+            with StateStore(paths.database) as store:
+                projects = ProjectService(store)
+                projects.register(
+                    "fixture-light",
+                    "Fixture Light",
+                    source,
+                    source_kind="git",
+                )
+
+                reasoner = LocalQwenAdapter(
+                    base_url=server.base_url,
+                    model="qwen-fixture-local",
+                    timeout=5,
+                )
+                worker = LightweightLocalWorker()
+                service = ZeroCostE2EService(
+                    store=store,
+                    projects=projects,
+                    paths=paths,
+                    reasoner=reasoner,
+                    planner=BoundedReadOnlyPlanner(),
+                    worker=worker,
+                )
+
+                verifier = VerifierSpec(
+                    name="fixture-content",
+                    argv=(
+                        "python",
+                        "-c",
+                        (
+                            "from pathlib import Path; "
+                            "assert Path('app.txt').read_text() == 'CHANGED\\n'"
+                        ),
+                    ),
+                )
+
+                def human_review(bundle):
+                    self.assertEqual(bundle.status, ReviewStatus.PASS)
+                    self.assertEqual(bundle.changed_files, ("app.txt",))
+                    return HumanReviewDecision(
+                        action=ReviewAction.APPLY,
+                        approved_change_fingerprint=bundle.change_fingerprint,
+                    )
+
+                worker_prompt = json.dumps(
+                    {
+                        "operation": "replace_text",
+                        "path": "app.txt",
+                        "expected_text": "SAFE\n",
+                        "new_text": "CHANGED\n",
+                    }
+                )
+                result = service.run(
+                    job_id="cp08d-lightweight-e2e",
+                    project_id="fixture-light",
+                    goal="Apply one explicit bounded text replacement locally.",
+                    worker_prompt=worker_prompt,
+                    verifier_specs=(verifier,),
+                    sandbox_write_approval=HumanApproval(granted=True),
+                    review_decider=human_review,
+                )
+
+                self.assertEqual(result.job_state, "COMPLETED")
+                self.assertEqual(result.worker_status, "COMPLETED")
+                self.assertEqual(result.review_status, "PASS")
+                self.assertEqual(result.apply_status, "APPLIED")
+                self.assertEqual((source / "app.txt").read_text(), "CHANGED\n")
+                self.assertEqual(git(source, "rev-parse", "HEAD"), original_head)
+
+                activities = store.list_activities("cp08d-lightweight-e2e")
+                processors = {x["processor"] for x in activities}
+                self.assertIn("lightweight_local", processors)
+                self.assertNotIn("hermes", processors)
 
     def test_nonhuman_approval_is_rejected(self):
         with self.assertRaises(ValueError):
