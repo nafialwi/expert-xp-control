@@ -3,12 +3,25 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 
 from .capability_registry import LocalCapabilityRegistry
+from .hermes_worker import HermesLocalWorker
+from .lightweight_worker import LightweightLocalWorker
 from .project_service import ProjectService
 from .runtime import XPRuntime
 from .service import build_project_context, build_read_only_plan, doctor, reason_project_context, status, version
 from .task_contract import TaskIntentKind
+from .worker_selection import (
+    ConfirmationStatus,
+    HumanWorkerConfirmation,
+    ResourceSnapshot,
+    SelectionStatus,
+    WorkerSelectionRequest,
+    WorkerSelector,
+    confirm_worker_selection,
+)
+from .worker_ui import render_worker_choice, render_worker_confirmation
 
 
 def _print(data: object) -> None:
@@ -28,6 +41,58 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status")
     sub.add_parser("doctor")
     sub.add_parser("capabilities")
+
+    worker = sub.add_parser("worker")
+    worker_sub = worker.add_subparsers(dest="worker_command", required=True)
+    choose = worker_sub.add_parser("choose")
+    prompt_group = choose.add_mutually_exclusive_group(required=True)
+    prompt_group.add_argument(
+        "--prompt",
+        help="Explicit worker prompt or CP-08D JSON operation.",
+    )
+    prompt_group.add_argument(
+        "--prompt-file",
+        type=Path,
+        help="Read the worker prompt from a local UTF-8 file.",
+    )
+    choose.add_argument(
+        "--backend",
+        choices=["lightweight_local", "hermes"],
+        default=None,
+        help="Request one exact worker instead of asking XP for a recommendation.",
+    )
+    decision = choose.add_mutually_exclusive_group()
+    decision.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Explicitly confirm the displayed worker.",
+    )
+    decision.add_argument(
+        "--decline",
+        action="store_true",
+        help="Explicitly decline the displayed worker.",
+    )
+    choose.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Emit structured JSON instead of the human-readable view.",
+    )
+    choose.add_argument(
+        "--hermes-binary",
+        default=None,
+        help="Optional Hermes executable override.",
+    )
+    choose.add_argument(
+        "--hermes-base-url",
+        default="http://127.0.0.1:18085/v1",
+        help="Loopback Hermes model endpoint.",
+    )
+    choose.add_argument(
+        "--hermes-model",
+        default="local",
+        help="Hermes local model identifier.",
+    )
 
     project = sub.add_parser("project")
     project_sub = project.add_subparsers(dest="project_command", required=True)
@@ -85,6 +150,94 @@ def build_parser() -> argparse.ArgumentParser:
     switch = project_sub.add_parser("switch")
     switch.add_argument("project_id")
     return parser
+
+
+def _load_worker_prompt(args: argparse.Namespace) -> str:
+    if args.prompt is not None:
+        return str(args.prompt)
+    path = Path(args.prompt_file).expanduser().resolve(strict=True)
+    if not path.is_file():
+        raise ValueError("worker prompt file must be a regular file")
+    if path.stat().st_size > 12_000:
+        raise ValueError("worker prompt file exceeds 12000-byte CLI limit")
+    return path.read_text(encoding="utf-8")
+
+
+def _worker_command(args: argparse.Namespace) -> int:
+    if args.worker_command != "choose":
+        raise AssertionError("unreachable")
+
+    prompt = _load_worker_prompt(args)
+    resources = ResourceSnapshot.probe_local_linux()
+    workers = {
+        "lightweight_local": LightweightLocalWorker(),
+        "hermes": HermesLocalWorker(
+            binary=args.hermes_binary,
+            base_url=args.hermes_base_url,
+            model=args.hermes_model,
+        ),
+    }
+    selector = WorkerSelector(workers)
+    request = WorkerSelectionRequest(
+        worker_prompt=prompt,
+        requested_backend=args.backend,
+    )
+    selection = selector.select(request, resources=resources)
+
+    if args.json_output:
+        _print({"selection": selection.as_dict()})
+    else:
+        print(render_worker_choice(selection))
+
+    if selection.status is SelectionStatus.NEEDS_ATTENTION:
+        return 2
+
+    approved: bool | None
+    if args.confirm:
+        approved = True
+    elif args.decline:
+        approved = False
+    elif sys.stdin.isatty():
+        answer = input("Pilihan: ").strip()
+        if answer == "1":
+            approved = True
+        elif answer == "0":
+            approved = False
+        else:
+            print("Pilihan tidak dikenal; worker tidak dijalankan.", file=sys.stderr)
+            return 2
+    else:
+        if not args.json_output:
+            print(
+                "Konfirmasi belum diberikan. Jalankan lagi dengan --confirm "
+                "atau --decline.",
+                file=sys.stderr,
+            )
+        return 3
+
+    assert selection.backend_id is not None
+    confirmation = confirm_worker_selection(
+        selector,
+        selection=selection,
+        request=request,
+        confirmation=HumanWorkerConfirmation(
+            backend_id=selection.backend_id,
+            approved=approved,
+        ),
+        resources=ResourceSnapshot.probe_local_linux(),
+    )
+
+    if args.json_output:
+        _print({"confirmation": confirmation.as_dict()})
+    else:
+        print()
+        print(render_worker_confirmation(confirmation))
+
+    if confirmation.status is ConfirmationStatus.CONFIRMED:
+        return 0
+    if confirmation.status is ConfirmationStatus.DECLINED:
+        return 4
+    return 2
 
 
 def _project_command(args: argparse.Namespace) -> int:
@@ -177,6 +330,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "capabilities":
         _print({"capabilities": LocalCapabilityRegistry().snapshot()})
         return 0
+    if args.command == "worker":
+        return _worker_command(args)
     if args.command == "project":
         return _project_command(args)
     raise AssertionError("unreachable")
