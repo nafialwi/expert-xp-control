@@ -2,7 +2,7 @@
 
 XP Next is a fresh, zero-cost-first local AI work system under active construction.
 
-Current checkpoint: CP-07A.
+Current checkpoint: CP-08H.
 
 Implemented so far:
 - canonical JobState and persistent SQLite StateStore;
@@ -25,13 +25,22 @@ Implemented so far:
 - manual rollback guarded by the exact applied-worktree fingerprint;
 - Discard that leaves the original project untouched.
 
-CP-07A is fixture-only and Git-only. Apply never commits, pushes, deploys, or
-runs database migrations. The recovery source is the unchanged original Git HEAD
-plus a local recovery manifest; HEAD changes invalidate rollback.
+The guarded Apply core remains Git-only. Apply never commits, pushes, deploys,
+or runs database migrations. The recovery source is the unchanged original Git
+HEAD plus a local recovery manifest; HEAD changes invalidate rollback.
 
-The SQLite recovery_points table is not yet wired to the CP-07A filesystem
-recovery manifest. End-to-end state-machine persistence belongs to the next
-integration checkpoint.
+The reviewed work path may target a registered Git project, but only through the
+isolated local worker + verifier + Apply/Discard controls. Production deployment,
+production database migration, mandatory cloud/9Router fallback, and silent
+worker substitution remain intentionally unavailable.
 
-Production projects, Segeran Jiwa, 9Router/cloud fallback, PWA, connectors, and
-production actions remain intentionally unavailable to this Apply path.
+
+## CP-08H human-friendly work flow
+
+`xp-next work` composes the existing local project context, worker selection,
+explicit human confirmation, isolated execution, verifier review, and guarded
+Apply/Discard path into one user-facing command. It remains local-first and
+fail-closed: no silent worker fallback, no Apply without a PASS review, no
+automatic commit/push/deploy, and no production database action. A canonical
+`npm run verify` script can be discovered automatically; other projects must
+provide an explicit verifier command.
