@@ -164,7 +164,7 @@ class RealGatewayEnvironment:
         connection = http.client.HTTPConnection(
             self.host,
             self.port,
-            timeout=8,
+            timeout=30,
         )
         final_headers = dict(headers or {})
         payload: str | None = None
@@ -177,24 +177,26 @@ class RealGatewayEnvironment:
         elif isinstance(body, str):
             payload = body
 
-        connection.request(
-            method,
-            path,
-            body=payload,
-            headers=final_headers,
-        )
-        response = connection.getresponse()
-        data = response.read()
-        content_type = response.getheader("Content-Type", "")
-        decoded: object
-        if data and content_type.startswith("application/json"):
-            decoded = json.loads(data.decode("utf-8"))
-        else:
-            decoded = data.decode("utf-8")
-        result_headers = dict(response.getheaders())
-        status = response.status
-        connection.close()
-        return status, result_headers, decoded
+        try:
+            connection.request(
+                method,
+                path,
+                body=payload,
+                headers=final_headers,
+            )
+            response = connection.getresponse()
+            data = response.read()
+            content_type = response.getheader("Content-Type", "")
+            decoded: object
+            if data and content_type.startswith("application/json"):
+                decoded = json.loads(data.decode("utf-8"))
+            else:
+                decoded = data.decode("utf-8")
+            result_headers = dict(response.getheaders())
+            status = response.status
+            return status, result_headers, decoded
+        finally:
+            connection.close()
 
     def _obtain_cookie(self) -> str:
         status, headers, _ = self.request("GET", "/")

@@ -1,7 +1,7 @@
 # CP-09C — Visual UX Convergence
 
-Date: 2026-09-23  
-Baseline: CP-09B remote-safe `db7395bd8efa41efbcc5baca2ec16b112a8bebd1`  
+Date: 2026-09-23
+Baseline: CP-09B remote-safe `db7395bd8efa41efbcc5baca2ec16b112a8bebd1`
 Feature branch: `work/cp09c-visual-ux`
 
 ## Outcome
