@@ -167,6 +167,267 @@ class WorkSessionContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "session payload must be an object"):
             _ = snapshot.payload
 
+import sys
+import tempfile
+from pathlib import Path
+
+from next.tests.test_zero_cost_e2e import LoopbackFixtureServer, init_source
+from xp_next.local_qwen import LocalQwenAdapter
+from xp_next.lightweight_worker import LightweightLocalWorker
+from xp_next.planner import BoundedReadOnlyPlanner
+from xp_next.project_service import ProjectService
+from xp_next.runtime_paths import RuntimePaths
+from xp_next.state_store import StateStore, StateStoreError
+from xp_next.worker_selection import ResourceSnapshot, WorkerSelector
+from xp_next.zero_cost_e2e import ReviewAction
+from xp_next.work_session_service import WorkSessionService
+
+
+class CountingWorker:
+    def __init__(self):
+        self.inner = LightweightLocalWorker()
+        self.run_count = 0
+
+    def readiness(self):
+        return self.inner.readiness()
+
+    def run(self, *args, **kwargs):
+        self.run_count += 1
+        return self.inner.run(*args, **kwargs)
+
+
+class WorkSessionServiceTests(unittest.TestCase):
+    def _verifier_command(self) -> str:
+        code = (
+            "from pathlib import Path; "
+            "assert Path('app.txt').read_text() == 'CHANGED\\n'"
+        )
+        return f'{sys.executable} -c "{code}"'
+
+    def _prompt(self) -> str:
+        return json.dumps(
+            {
+                "operation": "replace_text",
+                "path": "app.txt",
+                "expected_text": "SAFE\n",
+                "new_text": "CHANGED\n",
+            }
+        )
+
+    def _build(
+        self,
+        base: Path,
+        server: LoopbackFixtureServer,
+        *,
+        worker: CountingWorker | None = None,
+        reopen: bool = False,
+    ):
+        source = base / "source"
+        if not reopen:
+            init_source(source)
+        paths = RuntimePaths.resolve(base / "runtime").ensure()
+        store = StateStore(paths.database)
+        projects = ProjectService(store)
+        if not reopen:
+            projects.register(
+                "fixture",
+                "Fixture Project",
+                source,
+                source_kind="git",
+            )
+        selected_worker = worker or CountingWorker()
+        workers = {"lightweight_local": selected_worker}
+        selector = WorkerSelector(workers)
+        service = WorkSessionService(
+            store=store,
+            projects=projects,
+            paths=paths,
+            reasoner=LocalQwenAdapter(
+                base_url=server.base_url,
+                model="qwen-fixture-local",
+                timeout=5,
+            ),
+            planner=BoundedReadOnlyPlanner(),
+            workers=workers,
+            selector=selector,
+            resource_probe=lambda: ResourceSnapshot(
+                available_memory_mb=512,
+                logical_cpus=2,
+            ),
+        )
+        return source, store, service, selected_worker
+
+    def _create(self, service: WorkSessionService):
+        return service.create(
+            job_id="visual-1",
+            project_id="fixture",
+            goal="replace SAFE with CHANGED",
+            worker_prompt=self._prompt(),
+            verifier_command=self._verifier_command(),
+        )
+
+    def _approve_to_execute(self, service: WorkSessionService):
+        snapshot = self._create(service)
+        self.assertEqual(snapshot.state, JobState.AWAITING_APPROVAL)
+        self.assertEqual(
+            snapshot.allowed_actions,
+            (WorkAction.CONFIRM_WORKER, WorkAction.DECLINE_WORKER),
+        )
+        snapshot = service.decide_worker(
+            "visual-1",
+            backend_id="lightweight_local",
+            approved=True,
+            expected_revision=snapshot.revision,
+        )
+        self.assertEqual(
+            snapshot.allowed_actions,
+            (WorkAction.APPROVE_SANDBOX, WorkAction.DECLINE_SANDBOX),
+        )
+        snapshot = service.decide_sandbox(
+            "visual-1",
+            approved=True,
+            expected_revision=snapshot.revision,
+        )
+        self.assertEqual(snapshot.allowed_actions, (WorkAction.EXECUTE,))
+        return snapshot
+
+    def test_create_prepares_project_and_exposes_visible_worker_recommendation(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            _, store, service, _ = self._build(Path(td), server)
+            try:
+                snapshot = self._create(service)
+                self.assertEqual(snapshot.state, JobState.AWAITING_APPROVAL)
+                self.assertEqual(
+                    snapshot.payload["worker_selection"]["backend_id"],
+                    "lightweight_local",
+                )
+                self.assertEqual(snapshot.payload["project_name"], "Fixture Project")
+                self.assertNotIn("worker_confirmation", snapshot.payload)
+            finally:
+                store.close()
+
+    def test_worker_and_sandbox_decisions_are_resumable_and_stale_revision_fails(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            _, store, service, _ = self._build(Path(td), server)
+            try:
+                created = self._create(service)
+                approved = service.decide_worker(
+                    "visual-1",
+                    backend_id="lightweight_local",
+                    approved=True,
+                    expected_revision=created.revision,
+                )
+                with self.assertRaisesRegex(
+                    StateStoreError,
+                    "work session revision changed; refresh state",
+                ):
+                    service.decide_worker(
+                        "visual-1",
+                        backend_id="lightweight_local",
+                        approved=True,
+                        expected_revision=created.revision,
+                    )
+                worker_approvals = [
+                    row
+                    for row in store.list_approvals("visual-1")
+                    if row["approval_class"] == "worker_selection"
+                ]
+                self.assertEqual(len(worker_approvals), 1)
+
+                sandbox = service.decide_sandbox(
+                    "visual-1",
+                    approved=True,
+                    expected_revision=approved.revision,
+                )
+                self.assertTrue(sandbox.payload["sandbox_approved"])
+            finally:
+                store.close()
+
+    def test_execute_reaches_ready_to_review_and_keeps_original_unchanged(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            source, store, service, worker = self._build(Path(td), server)
+            try:
+                before = self._approve_to_execute(service)
+                reviewed = service.execute(
+                    "visual-1",
+                    expected_revision=before.revision,
+                )
+                self.assertEqual(reviewed.state, JobState.READY_TO_REVIEW)
+                self.assertEqual(reviewed.payload["review"]["status"], "PASS")
+                self.assertEqual(
+                    reviewed.allowed_actions,
+                    (WorkAction.APPLY, WorkAction.DISCARD),
+                )
+                self.assertEqual(worker.run_count, 1)
+                self.assertEqual((source / "app.txt").read_text(), "SAFE\n")
+            finally:
+                store.close()
+
+    def test_restart_at_review_discards_without_rerunning_worker(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            base = Path(td)
+            source, store, service, worker = self._build(base, server)
+            before = self._approve_to_execute(service)
+            reviewed = service.execute(
+                "visual-1",
+                expected_revision=before.revision,
+            )
+            review_revision = reviewed.revision
+            fingerprint = reviewed.payload["review"]["change_fingerprint"]
+            self.assertEqual(worker.run_count, 1)
+            store.close()
+
+            source2, reopened_store, reopened, same_worker = self._build(
+                base,
+                server,
+                worker=worker,
+                reopen=True,
+            )
+            try:
+                loaded = reopened.get("visual-1")
+                self.assertEqual(loaded.state, JobState.READY_TO_REVIEW)
+                self.assertEqual(loaded.revision, review_revision)
+                result = reopened.decide_review(
+                    "visual-1",
+                    action=ReviewAction.DISCARD,
+                    fingerprint=str(fingerprint),
+                    expected_revision=loaded.revision,
+                )
+                self.assertEqual(result.state, JobState.CANCELLED)
+                self.assertEqual(result.payload["apply_status"], "DISCARDED")
+                self.assertEqual(same_worker.run_count, 1)
+                self.assertEqual((source2 / "app.txt").read_text(), "SAFE\n")
+            finally:
+                reopened_store.close()
+
+    def test_missing_sandbox_after_review_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            source, store, service, _ = self._build(Path(td), server)
+            try:
+                before = self._approve_to_execute(service)
+                reviewed = service.execute(
+                    "visual-1",
+                    expected_revision=before.revision,
+                )
+                sandbox_root = Path(str(reviewed.payload["sandbox_root"]))
+                fingerprint = str(
+                    reviewed.payload["review"]["change_fingerprint"]
+                )
+                import shutil
+                shutil.rmtree(sandbox_root.parent)
+
+                result = service.decide_review(
+                    "visual-1",
+                    action=ReviewAction.APPLY,
+                    fingerprint=fingerprint,
+                    expected_revision=reviewed.revision,
+                )
+                self.assertEqual(result.state, JobState.NEEDS_ATTENTION)
+                self.assertIsNone(result.payload["apply_status"])
+                self.assertEqual((source / "app.txt").read_text(), "SAFE\n")
+            finally:
+                store.close()
+
 
 if __name__ == "__main__":
     unittest.main()
