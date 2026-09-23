@@ -34,20 +34,20 @@ class XPNextContractTests(unittest.TestCase):
         for current, target in zip(path, path[1:]):
             self.assertTrue(can_transition(current, target))
 
-    def test_schema_v1_creates_canonical_tables(self):
+    def test_schema_v2_creates_canonical_tables(self):
         conn = sqlite3.connect(":memory:")
         initialize_schema(conn)
-        self.assertEqual(SCHEMA_VERSION, 1)
+        self.assertEqual(SCHEMA_VERSION, 2)
         self.assertEqual(
             table_names(conn),
             {
                 "meta", "projects", "jobs", "job_steps", "approvals",
                 "activities", "recovery_points", "artifacts", "devices",
-                "preferences", "automations",
+                "preferences", "work_sessions", "automations",
             },
         )
         row = conn.execute("select value from meta where key='schema_version'").fetchone()
-        self.assertEqual(row[0], "1")
+        self.assertEqual(row[0], "2")
 
     def test_status_is_honest_about_local_state_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:

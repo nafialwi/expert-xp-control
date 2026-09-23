@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import json
 import sqlite3
 
 from .job_state import JobState, can_transition
@@ -32,6 +33,34 @@ def _as_dict(row: sqlite3.Row | None) -> dict[str, object] | None:
     if row is None:
         return None
     return {key: row[key] for key in row.keys()}
+
+
+def _encode_session_payload(payload: dict[str, object]) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    if len(encoded.encode("utf-8")) > 256_000:
+        raise StateStoreError("work session payload exceeds 256000 bytes")
+    return encoded
+
+
+def _decode_session_row(row: sqlite3.Row) -> dict[str, object]:
+    try:
+        payload = json.loads(str(row["payload_json"]))
+    except (TypeError, ValueError) as exc:
+        raise StateStoreError("work session payload is invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise StateStoreError("work session payload must be a JSON object")
+    return {
+        "job_id": row["job_id"],
+        "revision": int(row["revision"]),
+        "payload": payload,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
 
 
 class StateStore:
@@ -165,6 +194,77 @@ class StateStore:
         result = _as_dict(row)
         assert result is not None
         return result
+
+    def create_work_session(
+        self,
+        job_id: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        self.get_job(job_id)
+        encoded = _encode_session_payload(payload)
+        now = _utc_now()
+        try:
+            with self.connection:
+                self.connection.execute(
+                    """
+                    INSERT INTO work_sessions(
+                        job_id, revision, payload_json, created_at, updated_at
+                    ) VALUES(?,1,?,?,?)
+                    """,
+                    (job_id, encoded, now, now),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise StateStoreError(f"work session already exists: {job_id}") from exc
+        return self.get_work_session(job_id)
+
+    def get_work_session(self, job_id: str) -> dict[str, object]:
+        row = self.connection.execute(
+            "SELECT * FROM work_sessions WHERE job_id=?",
+            (job_id,),
+        ).fetchone()
+        if row is None:
+            raise StateStoreError(f"work session not found: {job_id}")
+        return _decode_session_row(row)
+
+    def list_work_sessions(self, limit: int = 20) -> list[dict[str, object]]:
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        rows = self.connection.execute(
+            """
+            SELECT * FROM work_sessions
+            ORDER BY updated_at DESC, job_id
+            LIMIT ?
+            """,
+            (min(limit, 100),),
+        ).fetchall()
+        return [_decode_session_row(row) for row in rows]
+
+    def update_work_session(
+        self,
+        job_id: str,
+        payload: dict[str, object],
+        *,
+        expected_revision: int,
+    ) -> dict[str, object]:
+        if expected_revision < 1:
+            raise ValueError("expected_revision must be positive")
+        self.get_job(job_id)
+        encoded = _encode_session_payload(payload)
+        now = _utc_now()
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE work_sessions
+                SET payload_json=?, revision=revision+1, updated_at=?
+                WHERE job_id=? AND revision=?
+                """,
+                (encoded, now, job_id, expected_revision),
+            )
+            if cursor.rowcount != 1:
+                raise StateStoreError(
+                    "work session revision changed; refresh state"
+                )
+        return self.get_work_session(job_id)
 
     def transition_job(
         self,

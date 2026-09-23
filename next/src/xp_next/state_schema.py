@@ -5,7 +5,7 @@ import sqlite3
 from .job_state import JobState
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class SchemaVersionError(RuntimeError):
@@ -106,6 +106,14 @@ CREATE TABLE IF NOT EXISTS preferences (
     PRIMARY KEY(scope, key)
 );
 
+CREATE TABLE IF NOT EXISTS work_sessions (
+    job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL CHECK(revision >= 1),
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS automations (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -132,16 +140,23 @@ def _existing_schema_version(connection: sqlite3.Connection) -> str | None:
 def initialize_schema(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA foreign_keys = ON")
     current = _existing_schema_version(connection)
-    if current is not None and current != str(SCHEMA_VERSION):
+    supported = {None, "1", str(SCHEMA_VERSION)}
+    if current not in supported:
         raise SchemaVersionError(
-            f"unsupported schema version: {current}; expected {SCHEMA_VERSION}"
+            f"unsupported schema version: {current}; expected 1 or {SCHEMA_VERSION}"
         )
 
     connection.executescript(_SCHEMA)
-    connection.execute(
-        "INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', ?)",
-        (str(SCHEMA_VERSION),),
-    )
+    if current == "1":
+        connection.execute(
+            "UPDATE meta SET value=? WHERE key='schema_version'",
+            (str(SCHEMA_VERSION),),
+        )
+    else:
+        connection.execute(
+            "INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', ?)",
+            (str(SCHEMA_VERSION),),
+        )
     connection.commit()
 
 
