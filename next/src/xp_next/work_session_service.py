@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Callable, Mapping
 
+from .capability_registry import LocalCapabilityRegistry
 from .job_state import JobState
 from .planner import BoundedReadOnlyPlanner
 from .project_service import ProjectService
@@ -15,7 +16,7 @@ from .sandbox_review import (
 )
 from .state_store import StateStore, StateStoreError
 from .work_flow import prepare_work
-from .work_session import WorkAction, WorkSessionSnapshot
+from .work_session import WorkAction, WorkSessionSnapshot, public_session
 from .worker_selection import (
     ConfirmationStatus,
     HumanWorkerConfirmation,
@@ -480,6 +481,108 @@ class WorkSessionService:
             expected_revision=expected_revision,
         )
         return self.get(job_id)
+
+
+    def _visual_project(
+        self,
+        project: Mapping[str, object],
+    ) -> dict[str, object]:
+        inspection = self.projects.inspect(str(project["id"]))
+        git_raw = inspection.get("git")
+        git = git_raw if isinstance(git_raw, Mapping) else {}
+        return {
+            "id": project["id"],
+            "name": project["name"],
+            "source_kind": project["source_kind"],
+            "active": bool(project["active"]),
+            "git": {
+                "inside_work_tree": git.get("inside_work_tree"),
+                "dirty": git.get("dirty"),
+                "branch": git.get("branch"),
+                "head": str(git.get("head") or "")[:12],
+            },
+        }
+
+    def list_visual_projects(self) -> list[dict[str, object]]:
+        return [
+            self._visual_project(project)
+            for project in self.projects.list_projects()
+        ]
+
+    def select_visual_project(
+        self,
+        project_id: str,
+    ) -> dict[str, object]:
+        project = self.projects.switch(project_id)
+        return self._visual_project(project)
+
+    def visual_snapshot(self) -> dict[str, object]:
+        active = self.projects.current()
+        latest_rows = self.store.list_work_sessions(limit=1)
+        latest_session: dict[str, object] | None = None
+        if latest_rows:
+            latest_session = public_session(
+                self.get(str(latest_rows[0]["job_id"]))
+            )
+
+        capabilities_raw = LocalCapabilityRegistry().snapshot()
+        capabilities = {
+            name: {
+                "state": value.get("state"),
+                "version": value.get("version"),
+                "network_used": bool(value.get("network_used", False)),
+            }
+            for name, value in capabilities_raw.items()
+        }
+
+        return {
+            "product": "XP Next",
+            "active_project": (
+                None if active is None else self._visual_project(active)
+            ),
+            "capabilities": capabilities,
+            "latest_session": latest_session,
+            "recovery_count": len(self.store.list_recovery_points()),
+        }
+
+    def public_activity(
+        self,
+        job_id: str | None = None,
+        *,
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        bounded = min(limit, 50)
+
+        if job_id is not None:
+            rows = self.store.list_activities(job_id)[-bounded:]
+        else:
+            fetched = self.store.connection.execute(
+                """
+                SELECT * FROM activities
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (bounded,),
+            ).fetchall()
+            rows = [
+                {key: row[key] for key in row.keys()}
+                for row in reversed(fetched)
+            ]
+
+        return [
+            {
+                "action": row["action"],
+                "status": row["status"],
+                "summary": row["summary"],
+                "source": row["source"],
+                "processor": row["processor"],
+                "live": bool(row["live"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
 
     def decide_review(
         self,

@@ -428,6 +428,97 @@ class WorkSessionServiceTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_visual_project_projection_is_bounded_and_selectable(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            base = Path(td)
+            _, store, service, _ = self._build(base, server)
+            try:
+                second = base / "second"
+                init_source(second)
+                service.projects.register(
+                    "second",
+                    "Second Project",
+                    second,
+                    source_kind="git",
+                )
+                projects = service.list_visual_projects()
+                self.assertEqual(
+                    {item["id"] for item in projects},
+                    {"fixture", "second"},
+                )
+                rendered = json.dumps(projects)
+                self.assertNotIn("root_path", rendered)
+                self.assertNotIn("files", rendered)
+                self.assertTrue(all("git" in item for item in projects))
+
+                selected = service.select_visual_project("second")
+                self.assertEqual(selected["id"], "second")
+                self.assertTrue(selected["active"])
+                self.assertEqual(
+                    service.projects.current()["id"],
+                    "second",
+                )
+            finally:
+                store.close()
+
+    def test_visual_snapshot_uses_latest_session_without_internal_secrets(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            _, store, service, _ = self._build(Path(td), server)
+            try:
+                service.projects.switch("fixture")
+                self._create(service)
+                snapshot = service.visual_snapshot()
+                self.assertEqual(snapshot["product"], "XP Next")
+                self.assertEqual(snapshot["active_project"]["id"], "fixture")
+                self.assertEqual(snapshot["latest_session"]["id"], "visual-1")
+                self.assertIn("capabilities", snapshot)
+                rendered = json.dumps(snapshot)
+                self.assertNotIn("worker_prompt", rendered)
+                self.assertNotIn("PRIVATE_PROMPT", rendered)
+                self.assertNotIn("sandbox_root", rendered)
+            finally:
+                store.close()
+
+    def test_public_activity_is_allowlisted_and_clamped_to_fifty(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            _, store, service, _ = self._build(Path(td), server)
+            try:
+                self._create(service)
+                for index in range(60):
+                    store.record_activity(
+                        f"visual-1:extra:{index:02d}",
+                        job_id="visual-1",
+                        category="test",
+                        action=f"action-{index}",
+                        status="Selesai",
+                        summary=f"safe summary {index}",
+                        source="fixture",
+                        processor="test",
+                        live=False,
+                    )
+                events = service.public_activity("visual-1", limit=1000)
+                self.assertEqual(len(events), 50)
+                rendered = json.dumps(events)
+                self.assertNotIn("worker_prompt", rendered)
+                self.assertNotIn("metadata", rendered)
+                for event in events:
+                    self.assertEqual(
+                        set(event),
+                        {
+                            "action",
+                            "status",
+                            "summary",
+                            "source",
+                            "processor",
+                            "live",
+                            "created_at",
+                        },
+                    )
+                with self.assertRaises(ValueError):
+                    service.public_activity("visual-1", limit=0)
+            finally:
+                store.close()
+
 
 if __name__ == "__main__":
     unittest.main()
