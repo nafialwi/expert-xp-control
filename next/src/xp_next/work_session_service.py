@@ -5,6 +5,7 @@ from typing import Callable, Mapping
 
 from .capability_registry import LocalCapabilityRegistry
 from .job_state import JobState
+from .isolated_workspace import validate_job_id
 from .planner import BoundedReadOnlyPlanner
 from .project_service import ProjectService
 from .runtime_paths import RuntimePaths
@@ -13,6 +14,7 @@ from .sandbox_review import (
     ReviewStatus,
     VerifierResult,
     VerifierSpec,
+    build_review_bundle,
 )
 from .state_store import StateStore, StateStoreError
 from .work_flow import prepare_work
@@ -62,12 +64,82 @@ class WorkSessionService:
     def get(self, job_id: str) -> WorkSessionSnapshot:
         job = self.store.get_job(job_id)
         session = self.store.get_work_session(job_id)
+        if JobState(str(job["state"])) is JobState.READY_TO_REVIEW:
+            payload = session.get("payload")
+            if (
+                isinstance(payload, dict)
+                and not isinstance(payload.get("review"), Mapping)
+            ):
+                job, session = self._reconcile_ready_to_review(
+                    job,
+                    session,
+                )
         activities = tuple(self.store.list_activities(job_id))
         return WorkSessionSnapshot(
             job=job,
             session=session,
             activities=activities,
         )
+
+    def _reconcile_ready_to_review(
+        self,
+        job: dict[str, object],
+        session: dict[str, object],
+    ) -> tuple[dict[str, object], dict[str, object]]:
+        job_id = str(job["id"])
+        revision = int(session["revision"])
+        raw_payload = session.get("payload")
+        if not isinstance(raw_payload, dict):
+            raise StateStoreError("session payload must be an object")
+        payload = deepcopy(raw_payload)
+
+        sandbox_root = str(payload.get("sandbox_root") or "")
+        expected_head = str(
+            payload.get("expected_original_head")
+            or payload.get("source_head")
+            or ""
+        )
+
+        def fail(reason: str) -> tuple[dict[str, object], dict[str, object]]:
+            current = JobState(str(self.store.get_job(job_id)["state"]))
+            if current is JobState.READY_TO_REVIEW:
+                self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
+            payload["review_error"] = reason
+            updated = self.store.update_work_session(
+                job_id,
+                payload,
+                expected_revision=revision,
+            )
+            return self.store.get_job(job_id), updated
+
+        if not sandbox_root or not expected_head:
+            return fail("review_resume_metadata_missing")
+
+        try:
+            verifier = self._verifier_from_payload(payload)
+            review = build_review_bundle(
+                sandbox_root,
+                verifier_specs=(verifier,),
+            )
+        except Exception:
+            return fail("review_rebuild_failed")
+
+        if review.status is not ReviewStatus.PASS:
+            return fail("review_rebuild_not_pass")
+
+        payload["review"] = review.as_dict()
+        payload["expected_original_head"] = expected_head
+        payload["execution"] = {
+            "reasoning_status": "COMPLETED",
+            "plan_status": "READY",
+            "worker_status": "COMPLETED",
+        }
+        updated = self.store.update_work_session(
+            job_id,
+            payload,
+            expected_revision=revision,
+        )
+        return self.store.get_job(job_id), updated
 
     @staticmethod
     def _require_revision(
@@ -224,6 +296,7 @@ class WorkSessionService:
         verifier_timeout: float = 120.0,
         requested_backend: str | None = None,
     ) -> WorkSessionSnapshot:
+        job_id = validate_job_id(job_id)
         prepared = prepare_work(
             self.projects,
             goal=goal,
@@ -451,6 +524,27 @@ class WorkSessionService:
             planner=self.planner,
             worker=worker,
         )
+
+        expected_head = str(payload.get("source_head") or "")
+        if not expected_head:
+            self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
+            raise StateStoreError("prepared source HEAD is missing")
+        payload["sandbox_root"] = str(
+            self.paths.workspaces / job_id / "project"
+        )
+        payload["expected_original_head"] = expected_head
+        payload["execution"] = {
+            "reasoning_status": "PENDING",
+            "plan_status": "PENDING",
+            "worker_status": "PENDING",
+        }
+        pre_execution = self.store.update_work_session(
+            job_id,
+            payload,
+            expected_revision=expected_revision,
+        )
+        execution_revision = int(pre_execution["revision"])
+
         result = engine.execute_existing_to_review(
             job_id=job_id,
             project_id=str(snapshot.job["project_id"]),
@@ -478,7 +572,7 @@ class WorkSessionService:
         self.store.update_work_session(
             job_id,
             payload,
-            expected_revision=expected_revision,
+            expected_revision=execution_revision,
         )
         return self.get(job_id)
 

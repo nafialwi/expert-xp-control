@@ -270,6 +270,12 @@ class _GatewayHandler(BaseHTTPRequestHandler):
         return False
 
     def do_GET(self) -> None:
+        if not self._loopback_host_header_ok():
+            self._send_json(
+                403,
+                {"ok": False, "error": "loopback host required"},
+            )
+            return
         parsed = urlparse(self.path)
         path = parsed.path
         try:
@@ -320,10 +326,28 @@ class _GatewayHandler(BaseHTTPRequestHandler):
             return 200, service.select_visual_project(project_id)
 
         if path == "/api/v2/work-sessions":
-            job_id = str(payload.get("job_id") or "").strip()
+            if "verifier_command" in payload:
+                raise ValueError(
+                    "browser verifier_command is forbidden; use project verifier policy"
+                )
+            raw_job_id = str(payload.get("job_id") or "")
+            job_id = raw_job_id.strip()
             goal = str(payload.get("goal") or "").strip()
-            if not job_id or not goal:
-                raise ValueError("job_id and goal are required")
+            allowed = set(
+                "abcdefghijklmnopqrstuvwxyz"
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                "0123456789-_."
+            )
+            if (
+                not job_id
+                or job_id != raw_job_id
+                or len(job_id) > 120
+                or job_id in {".", ".."}
+                or any(ch not in allowed for ch in job_id)
+            ):
+                raise ValueError("job_id is invalid")
+            if not goal:
+                raise ValueError("goal is required")
             project_value = payload.get("project_id")
             result = service.create(
                 job_id=job_id,
@@ -338,11 +362,7 @@ class _GatewayHandler(BaseHTTPRequestHandler):
                     if payload.get("worker_prompt") is None
                     else str(payload.get("worker_prompt"))
                 ),
-                verifier_command=(
-                    None
-                    if payload.get("verifier_command") is None
-                    else str(payload.get("verifier_command"))
-                ),
+                verifier_command=None,
                 verifier_timeout=float(
                     payload.get("verifier_timeout", 120.0)
                 ),

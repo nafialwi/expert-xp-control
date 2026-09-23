@@ -50,16 +50,38 @@ def operation_prompt() -> str:
     )
 
 
-def passing_verifier_command() -> str:
-    code = (
-        "from pathlib import Path; "
-        "assert Path('app.txt').read_text() == 'CHANGED\\n'"
-    )
+def project_verifier_script(*, failing: bool = False) -> str:
+    if failing:
+        code = "raise SystemExit(7)"
+    else:
+        code = (
+            "from pathlib import Path; "
+            "assert Path('app.txt').read_text() == 'CHANGED\\n'"
+        )
     return f'{sys.executable} -c "{code}"'
 
 
-def failing_verifier_command() -> str:
-    return f'{sys.executable} -c "raise SystemExit(7)"'
+def install_project_verifier(
+    root: Path,
+    *,
+    failing: bool = False,
+) -> None:
+    (root / "package.json").write_text(
+        json.dumps(
+            {
+                "private": True,
+                "scripts": {
+                    "verify": project_verifier_script(failing=failing),
+                },
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    git(root, "add", "package.json")
+    git(root, "commit", "-qm", "fixture verifier")
 
 
 class RealGatewayEnvironment:
@@ -75,6 +97,7 @@ class RealGatewayEnvironment:
         self.source = base / "source"
         if not reopen:
             init_source(self.source)
+            install_project_verifier(self.source)
 
         self.paths = RuntimePaths.resolve(base / "runtime").ensure()
         self.store = StateStore(self.paths.database)
@@ -216,8 +239,6 @@ class RealGatewayEnvironment:
     def create(
         self,
         job_id: str,
-        *,
-        verifier_command: str | None = None,
     ) -> tuple[int, dict[str, object]]:
         return self.post(
             "/api/v2/work-sessions",
@@ -226,24 +247,14 @@ class RealGatewayEnvironment:
                 "project_id": "fixture",
                 "goal": "Change app.txt safely",
                 "worker_prompt": operation_prompt(),
-                "verifier_command": (
-                    passing_verifier_command()
-                    if verifier_command is None
-                    else verifier_command
-                ),
             },
         )
 
     def to_review(
         self,
         job_id: str,
-        *,
-        verifier_command: str | None = None,
     ) -> dict[str, object]:
-        status, created = self.create(
-            job_id,
-            verifier_command=verifier_command,
-        )
+        status, created = self.create(job_id)
         if status != 201:
             raise AssertionError((status, created))
 
@@ -455,10 +466,11 @@ class CP09BHTTPAcceptanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as reasoner:
             env = RealGatewayEnvironment(Path(td), reasoner)
             try:
-                result = env.to_review(
-                    "verify-fail",
-                    verifier_command=failing_verifier_command(),
+                install_project_verifier(
+                    env.source,
+                    failing=True,
                 )
+                result = env.to_review("verify-fail")
                 self.assertEqual(result["state"], "NEEDS_ATTENTION")
                 self.assertEqual(result["allowed_actions"], [])
                 self.assertEqual(
@@ -591,7 +603,6 @@ class CP09BHTTPAcceptanceTests(unittest.TestCase):
                     "project_id": "fixture",
                     "goal": "blocked",
                     "worker_prompt": operation_prompt(),
-                    "verifier_command": passing_verifier_command(),
                 }
                 status, result = env.post(
                     "/api/v2/work-sessions",

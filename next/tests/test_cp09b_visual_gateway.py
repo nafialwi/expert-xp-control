@@ -300,6 +300,68 @@ class CP09BVisualGatewayTests(unittest.TestCase):
         finally:
             harness.close()
 
+    def test_get_api_rejects_non_loopback_host_header(self):
+        harness = GatewayHarness()
+        try:
+            status, _, body = harness.request(
+                "GET",
+                "/api/v2/snapshot",
+                headers={"Host": "evil.invalid"},
+            )
+            self.assertEqual(status, 403)
+            self.assertFalse(body["ok"])
+        finally:
+            harness.close()
+
+    def test_create_rejects_browser_supplied_verifier_command(self):
+        harness = GatewayHarness()
+        try:
+            cookie = harness.session_cookie()
+            headers = harness.mutation_headers(cookie)
+            status, _, body = harness.request(
+                "POST",
+                "/api/v2/work-sessions",
+                body={
+                    "job_id": "j1",
+                    "project_id": "p1",
+                    "goal": "goal",
+                    "worker_prompt": "{}",
+                    "verifier_command": "python -c 'pass'",
+                },
+                headers=headers,
+            )
+            self.assertEqual(status, 400)
+            self.assertFalse(body["ok"])
+            self.assertFalse(
+                any(name == "create" for name, _ in harness.service.calls)
+            )
+        finally:
+            harness.close()
+
+    def test_create_rejects_unsafe_job_id(self):
+        harness = GatewayHarness()
+        try:
+            cookie = harness.session_cookie()
+            headers = harness.mutation_headers(cookie)
+            status, _, body = harness.request(
+                "POST",
+                "/api/v2/work-sessions",
+                body={
+                    "job_id": "../escape",
+                    "project_id": "p1",
+                    "goal": "goal",
+                    "worker_prompt": "{}",
+                },
+                headers=headers,
+            )
+            self.assertEqual(status, 400)
+            self.assertFalse(body["ok"])
+            self.assertFalse(
+                any(name == "create" for name, _ in harness.service.calls)
+            )
+        finally:
+            harness.close()
+
     def test_mutation_requires_cookie_exact_origin_and_json(self):
         harness = GatewayHarness()
         try:
@@ -360,7 +422,6 @@ class CP09BVisualGatewayTests(unittest.TestCase):
                     "project_id": "p1",
                     "goal": "goal",
                     "worker_prompt": "{}",
-                    "verifier_command": "python -c 'pass'",
                 },
                 headers=headers,
             )

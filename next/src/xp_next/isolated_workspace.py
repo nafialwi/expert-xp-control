@@ -11,6 +11,12 @@ class IsolationError(RuntimeError):
 
 
 _SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", "node_modules"}
+_JOB_ID_ALLOWED = frozenset(
+    "abcdefghijklmnopqrstuvwxyz"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "0123456789-_."
+)
+
 _SENSITIVE_NAMES = {
     ".env",
     ".npmrc",
@@ -82,21 +88,35 @@ def _copy_bounded(
         shutil.copy2(path, destination)
 
 
+def validate_job_id(job_id: str) -> str:
+    value = str(job_id)
+    if (
+        not value
+        or value != value.strip()
+        or len(value) > 120
+        or value in {".", ".."}
+        or any(ch not in _JOB_ID_ALLOWED for ch in value)
+    ):
+        raise ValueError(
+            "job_id must be 1-120 safe ASCII characters: letters, digits, -_."
+        )
+    return value
+
+
 def prepare_isolated_workspace(
     source_root: Path | str,
     destination_parent: Path | str,
     *,
     job_id: str,
 ) -> IsolatedWorkspace:
-    if not job_id.strip():
-        raise IsolationError("job_id must not be empty")
+    safe_job_id = validate_job_id(job_id)
 
     source = Path(source_root).expanduser().resolve(strict=True)
     if not source.is_dir():
         raise IsolationError("source_root must be a directory")
 
     parent = Path(destination_parent).expanduser().resolve()
-    root = parent / job_id
+    root = parent / safe_job_id
     try:
         root.relative_to(source)
     except ValueError:
@@ -135,7 +155,7 @@ def prepare_isolated_workspace(
         raise
 
     return IsolatedWorkspace(
-        job_id=job_id,
+        job_id=safe_job_id,
         source=source,
         root=root,
         project=project,

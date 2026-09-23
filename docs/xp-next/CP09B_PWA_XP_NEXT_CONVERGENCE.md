@@ -139,14 +139,14 @@ Command covered:
 Result:
 
 ```text
-Ran 41 tests
+Ran 47 tests
 OK
 ```
 
 ### Full XP Next regression
 
 ```text
-Ran 183 tests
+Ran 189 tests
 OK
 ```
 
@@ -191,6 +191,17 @@ Proven behaviors:
 - Missing sandbox: PASS — `NEEDS_ATTENTION`, original unchanged.
 - Stale revision/retried mutation: PASS — HTTP 409, no duplicate approval/side effect.
 - Invalid Origin/cookie: PASS — HTTP 403 before service mutation.
+
+## Final review hardening
+
+A final security/resume review found four Important gaps after the first green checkpoint. They were fixed with RED→GREEN tests before integration:
+
+- Read-only/API GET requests now reject non-loopback `Host` headers, closing the local metadata DNS-rebinding disclosure path.
+- Browser work-session creation rejects raw `verifier_command`; visual sessions use project-owned verifier policy/discovery instead of browser-selected local commands.
+- Browser and service job IDs are constrained to bounded path-safe ASCII; isolated workspace creation enforces the same contract before filesystem path construction.
+- Execute now persists deterministic sandbox/source resume metadata before worker execution. If XP restarts after the engine reaches `READY_TO_REVIEW` but before the final session payload update, `WorkSessionService` rebuilds the review from the persisted sandbox/verifier without rerunning the worker. Missing/failed reconstruction fails closed to `NEEDS_ATTENTION`.
+
+The E2E fixture was updated to use a committed project `package.json scripts.verify` verifier, proving the browser path no longer needs arbitrary verifier commands.
 
 ## Production boundary
 

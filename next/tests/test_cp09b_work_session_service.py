@@ -291,6 +291,23 @@ class WorkSessionServiceTests(unittest.TestCase):
         self.assertEqual(snapshot.allowed_actions, (WorkAction.EXECUTE,))
         return snapshot
 
+    def test_service_rejects_unsafe_job_id_before_persistence(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            _, store, service, _ = self._build(Path(td), server)
+            try:
+                with self.assertRaisesRegex(ValueError, "job_id"):
+                    service.create(
+                        job_id="../escape",
+                        project_id="fixture",
+                        goal="unsafe",
+                        worker_prompt=self._prompt(),
+                        verifier_command=self._verifier_command(),
+                    )
+                with self.assertRaises(Exception):
+                    store.get_job("../escape")
+            finally:
+                store.close()
+
     def test_create_prepares_project_and_exposes_visible_worker_recommendation(self):
         with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
             _, store, service, _ = self._build(Path(td), server)
@@ -362,6 +379,84 @@ class WorkSessionServiceTests(unittest.TestCase):
                 self.assertEqual((source / "app.txt").read_text(), "SAFE\n")
             finally:
                 store.close()
+
+    def test_execute_persists_resume_metadata_before_worker_runs(self):
+        holder: dict[str, object] = {}
+
+        class InspectingWorker(CountingWorker):
+            def run(self, *args, **kwargs):
+                store = holder["store"]
+                assert isinstance(store, StateStore)
+                session = store.get_work_session("visual-1")
+                payload = session["payload"]
+                self_test.assertIn("sandbox_root", payload)
+                self_test.assertIn("expected_original_head", payload)
+                self_test.assertIn("execution", payload)
+                return super().run(*args, **kwargs)
+
+        self_test = self
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            worker = InspectingWorker()
+            _, store, service, _ = self._build(
+                Path(td),
+                server,
+                worker=worker,
+            )
+            holder["store"] = store
+            try:
+                before = self._approve_to_execute(service)
+                reviewed = service.execute(
+                    "visual-1",
+                    expected_revision=before.revision,
+                )
+                self.assertEqual(reviewed.state, JobState.READY_TO_REVIEW)
+                self.assertEqual(worker.run_count, 1)
+            finally:
+                store.close()
+
+    def test_ready_to_review_reconciles_missing_review_metadata_after_restart(self):
+        with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
+            base = Path(td)
+            _, store, service, worker = self._build(base, server)
+            before = self._approve_to_execute(service)
+            reviewed = service.execute(
+                "visual-1",
+                expected_revision=before.revision,
+            )
+            payload = dict(reviewed.payload)
+            payload["review"] = None
+            payload.pop("execution_result", None)
+            payload["execution"] = {
+                "reasoning_status": "STARTED",
+                "plan_status": "STARTED",
+                "worker_status": "STARTED",
+            }
+            damaged = store.update_work_session(
+                "visual-1",
+                payload,
+                expected_revision=reviewed.revision,
+            )
+            damaged_revision = int(damaged["revision"])
+            store.close()
+
+            _, reopened_store, reopened, same_worker = self._build(
+                base,
+                server,
+                worker=worker,
+                reopen=True,
+            )
+            try:
+                loaded = reopened.get("visual-1")
+                self.assertEqual(loaded.state, JobState.READY_TO_REVIEW)
+                self.assertGreater(loaded.revision, damaged_revision)
+                self.assertEqual(loaded.payload["review"]["status"], "PASS")
+                self.assertEqual(
+                    loaded.allowed_actions,
+                    (WorkAction.APPLY, WorkAction.DISCARD),
+                )
+                self.assertEqual(same_worker.run_count, 1)
+            finally:
+                reopened_store.close()
 
     def test_restart_at_review_discards_without_rerunning_worker(self):
         with tempfile.TemporaryDirectory() as td, LoopbackFixtureServer() as server:
