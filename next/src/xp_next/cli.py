@@ -26,7 +26,9 @@ from .worker_selection import (
     confirm_worker_selection,
 )
 from .worker_ui import render_worker_choice, render_worker_confirmation
+from .visual_gateway import make_visual_gateway
 from .work_flow import WorkFlowNeedsAttention, prepare_work
+from .work_session_service import WorkSessionService
 from .zero_cost_e2e import (
     HumanApproval,
     HumanReviewDecision,
@@ -132,6 +134,25 @@ def build_parser() -> argparse.ArgumentParser:
     work.add_argument("--hermes-context-length", type=int, default=65536)
     work.add_argument("--hermes-timeout", type=float, default=480.0)
 
+    visual = sub.add_parser(
+        "visual-gateway",
+        help="Development-only loopback PWA gateway",
+    )
+    visual.add_argument("--host", default="127.0.0.1")
+    visual.add_argument("--port", type=int, default=8765)
+    visual.add_argument("--static-root", type=Path, default=None)
+    visual.add_argument("--qwen-base-url", default="http://127.0.0.1:8080")
+    visual.add_argument("--qwen-model", default="local")
+    visual.add_argument("--qwen-timeout", type=float, default=120.0)
+    visual.add_argument("--hermes-binary", default=None)
+    visual.add_argument(
+        "--hermes-base-url",
+        default="http://127.0.0.1:18085/v1",
+    )
+    visual.add_argument("--hermes-model", default="local")
+    visual.add_argument("--hermes-context-length", type=int, default=65536)
+    visual.add_argument("--hermes-timeout", type=float, default=480.0)
+
     project = sub.add_parser("project")
     project_sub = project.add_subparsers(dest="project_command", required=True)
     project_sub.add_parser("list")
@@ -201,20 +222,32 @@ def _load_worker_prompt(args: argparse.Namespace) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _build_local_workers(args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "lightweight_local": LightweightLocalWorker(),
+        "hermes": HermesLocalWorker(
+            binary=getattr(args, "hermes_binary", None),
+            base_url=getattr(
+                args,
+                "hermes_base_url",
+                "http://127.0.0.1:18085/v1",
+            ),
+            model=getattr(args, "hermes_model", "local"),
+            context_length=int(
+                getattr(args, "hermes_context_length", 65536)
+            ),
+            timeout=float(getattr(args, "hermes_timeout", 480.0)),
+        ),
+    }
+
+
 def _worker_command(args: argparse.Namespace) -> int:
     if args.worker_command != "choose":
         raise AssertionError("unreachable")
 
     prompt = _load_worker_prompt(args)
     resources = ResourceSnapshot.probe_local_linux()
-    workers = {
-        "lightweight_local": LightweightLocalWorker(),
-        "hermes": HermesLocalWorker(
-            binary=args.hermes_binary,
-            base_url=args.hermes_base_url,
-            model=args.hermes_model,
-        ),
-    }
+    workers = _build_local_workers(args)
     selector = WorkerSelector(workers)
     request = WorkerSelectionRequest(
         worker_prompt=prompt,
@@ -375,16 +408,7 @@ def _work_command(args: argparse.Namespace) -> int:
             )
             print()
 
-        workers = {
-            "lightweight_local": LightweightLocalWorker(),
-            "hermes": HermesLocalWorker(
-                binary=args.hermes_binary,
-                base_url=args.hermes_base_url,
-                model=args.hermes_model,
-                context_length=args.hermes_context_length,
-                timeout=args.hermes_timeout,
-            ),
-        }
+        workers = _build_local_workers(args)
         selector = WorkerSelector(workers)
         request = WorkerSelectionRequest(
             worker_prompt=prepared.worker_prompt,
@@ -508,6 +532,52 @@ def _work_command(args: argparse.Namespace) -> int:
             return 4
         return 2
 
+def _visual_gateway_command(args: argparse.Namespace) -> int:
+    workers = _build_local_workers(args)
+
+    static_root = args.static_root
+
+    with XPRuntime.open(args.home) as runtime:
+        projects = ProjectService(runtime.store)
+        selector = WorkerSelector(workers)
+        service = WorkSessionService(
+            store=runtime.store,
+            projects=projects,
+            paths=runtime.paths,
+            reasoner=LocalQwenAdapter(
+                base_url=args.qwen_base_url,
+                model=args.qwen_model,
+                timeout=args.qwen_timeout,
+            ),
+            planner=BoundedReadOnlyPlanner(),
+            workers=workers,
+            selector=selector,
+        )
+        server = make_visual_gateway(
+            host=args.host,
+            port=args.port,
+            service=service,
+            static_root=static_root,
+        )
+        bound_host = str(server.server_address[0])
+        bound_port = int(server.server_address[1])
+        display_host = (
+            f"[{bound_host}]" if ":" in bound_host else bound_host
+        )
+        print(
+            "XP Next Visual Gateway: "
+            f"http://{display_host}:{bound_port}"
+        )
+        print("Mode: loopback-only / development")
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
+    return 0
+
+
 def _project_command(args: argparse.Namespace) -> int:
     if args.project_command == "plan":
         intent = TaskIntentKind(args.intent.upper())
@@ -602,6 +672,8 @@ def main(argv: list[str] | None = None) -> int:
         return _worker_command(args)
     if args.command == "work":
         return _work_command(args)
+    if args.command == "visual-gateway":
+        return _visual_gateway_command(args)
     if args.command == "project":
         return _project_command(args)
     raise AssertionError("unreachable")
