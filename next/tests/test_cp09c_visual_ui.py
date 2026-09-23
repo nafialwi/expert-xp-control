@@ -257,5 +257,42 @@ class CP09CStaticShellTests(unittest.TestCase):
         self.assertEqual(self.manifest["scope"], "/")
 
 
+
+class CP09CAppReadModelTests(unittest.TestCase):
+    def setUp(self):
+        root = _default_visual_static_root()
+        assert isinstance(root, Path)
+        self.js = (root / "app.js").read_text(encoding="utf-8")
+
+    def test_app_uses_only_v2_read_endpoints(self):
+        self.assertNotIn("/api/status", self.js)
+        for path in (
+            "/api/v2/snapshot",
+            "/api/v2/projects",
+            "/api/v2/activity",
+        ):
+            self.assertIn(path, self.js)
+
+    def test_app_fetches_same_origin_and_never_sends_verifier_command(self):
+        self.assertIn('credentials: "same-origin"', self.js)
+        self.assertNotIn("verifier_command", self.js)
+
+    def test_app_has_safe_job_id_generation_and_navigation(self):
+        self.assertIn("crypto.randomUUID", self.js)
+        self.assertIn("work-", self.js)
+        self.assertIn("data-view", self.js)
+        self.assertIn("showView", self.js)
+
+    def test_app_renders_snapshot_projects_activity_and_settings(self):
+        for name in (
+            "renderHome",
+            "renderProjects",
+            "renderActivity",
+            "renderSettings",
+            "loadAll",
+        ):
+            self.assertIn(f"function {name}", self.js)
+
+
 if __name__ == "__main__":
     unittest.main()
