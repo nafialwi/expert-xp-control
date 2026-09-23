@@ -4,7 +4,7 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#07101d",
-  "theme_color": "#0b1220",
-  "description": "Local-only visual status surface for Expert XP."
+  "background_color": "#f4f7f5",
+  "theme_color": "#f4f8f6",
+  "description": "Local-first PWA for governed Expert XP work sessions."
 }

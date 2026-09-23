@@ -3,98 +3,312 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0b1220">
-  <title>Expert XP Visual Workstation</title>
+  <meta name="theme-color" content="#f4f8f6">
+  <meta name="color-scheme" content="light">
+  <title>Expert XP</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="logo">XP</div>
-      <div>
-        <strong>Expert XP</strong>
-        <span>Personal Agentic Workstation</span>
-      </div>
-    </div>
-    <nav>
-      <button class="nav active">Overview</button>
-      <button class="nav" data-target="activity">Activity Trail</button>
-    </nav>
-    <div class="side-note">
-      <span class="dot"></span>
-      Local-only interface
-    </div>
-  </aside>
-
-  <main>
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">VISUAL WORKSTATION</p>
-        <h1 id="project">Memuat status…</h1>
-        <p id="checkpoint" class="sub">Checkpoint —</p>
-      </div>
-      <div class="top-actions">
-        <span id="sourceBadge" class="badge">LOCAL/OFFLINE</span>
-        <button id="refresh">Refresh Status</button>
-      </div>
-    </header>
-
-    <section class="hero">
-      <div>
-        <p class="eyebrow">CURRENT MODE</p>
-        <h2 id="mode">—</h2>
-        <p id="finalStatus">Status —</p>
-      </div>
-      <div class="hero-grid">
-        <div><span>Provider</span><b id="provider">—</b></div>
-        <div><span>Model</span><b id="model">—</b></div>
-        <div><span>Cost</span><b id="cost">—</b></div>
-        <div><span>Worker</span><b id="worker">—</b></div>
-      </div>
-    </section>
-
-    <section class="cards">
-      <article>
-        <span>Recovery</span>
-        <strong id="recovery">—</strong>
-      </article>
-      <article>
-        <span>Permission</span>
-        <strong id="permission">—</strong>
-      </article>
-      <article>
-        <span>Approval</span>
-        <strong id="approval">—</strong>
-      </article>
-      <article>
-        <span>Verification</span>
-        <strong id="verification">—</strong>
-      </article>
-      <article>
-        <span>Rollback</span>
-        <strong id="rollback">—</strong>
-      </article>
-    </section>
-
-    <section id="activity" class="panel">
-      <div class="panel-head">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">XP</div>
         <div>
-          <p class="eyebrow">OBSERVABLE EVIDENCE</p>
-          <h2>Activity Trail</h2>
+          <strong>Expert XP</strong>
+          <span>Visual Workstation</span>
         </div>
-        <span id="activityCount" class="badge">0 events</span>
       </div>
-      <div id="activityList" class="timeline">
-        <div class="empty">Belum ada aktivitas pada snapshot ini.</div>
+
+      <nav class="primary-nav" aria-label="Navigasi utama">
+        <button class="nav-item active" type="button" data-view="home">Home</button>
+        <button class="nav-item" type="button" data-view="work">Work</button>
+        <button class="nav-item" type="button" data-view="projects">Projects</button>
+        <button class="nav-item" type="button" data-view="activity">Activity</button>
+        <button class="nav-item" type="button" data-view="settings">Settings</button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="local-chip"><span class="status-dot"></span>Local / Aman</div>
+        <p>Gateway hanya tersedia pada perangkat ini.</p>
       </div>
-    </section>
+    </aside>
 
-    <footer>
-      Expert XP visual surface · observable state only · no hidden reasoning
-    </footer>
-  </main>
+    <main class="main-content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">EXPERT XP</p>
+          <h1 id="pageTitle">Home</h1>
+          <p id="activeProjectName" class="muted">Memuat project aktif…</p>
+        </div>
+        <div class="topbar-actions">
+          <span id="connectionBadge" class="pill pill-safe">Local / Aman</span>
+          <button id="refreshAllButton" class="button button-secondary" type="button">Refresh</button>
+        </div>
+      </header>
 
+      <div id="globalStatus" class="notice notice-neutral" role="status" aria-live="polite">
+        Memuat status XP…
+      </div>
+
+      <section id="view-home" class="view active" data-view-panel="home">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">HOME</p>
+            <h2>Siap melanjutkan pekerjaan</h2>
+            <p class="muted">Pilih project, jelaskan tujuan, lalu XP akan menjaga approval, sandbox, verification, dan review.</p>
+          </div>
+        </div>
+
+        <article class="card composer-card">
+          <div class="card-heading">
+            <div>
+              <span class="section-kicker">Mulai pekerjaan</span>
+              <h3>Apa yang ingin Anda kerjakan?</h3>
+            </div>
+            <span class="pill">Human approval wajib</span>
+          </div>
+          <label class="field-label" for="homeGoal">Instruksi pekerjaan</label>
+          <textarea id="homeGoal" rows="4" maxlength="12000" placeholder="Contoh: lanjutkan integrasi PWA dan pastikan semua test tetap lolos"></textarea>
+          <div class="composer-actions">
+            <p class="helper">XP tidak mengubah source asli sebelum Anda memilih Terapkan.</p>
+            <button id="homeStartButton" class="button button-primary" type="button">Mulai</button>
+          </div>
+        </article>
+
+        <div class="dashboard-grid">
+          <article id="activeProjectCard" class="card project-focus">
+            <span class="section-kicker">Project aktif</span>
+            <h3 id="homeProjectName">Belum ada project aktif</h3>
+            <div class="meta-list">
+              <div><span>Branch</span><strong id="homeProjectBranch">—</strong></div>
+              <div><span>Source</span><strong id="homeProjectState">—</strong></div>
+              <div><span>HEAD</span><strong id="homeProjectHead">—</strong></div>
+            </div>
+            <button class="text-button" type="button" data-view-jump="projects">Kelola project →</button>
+          </article>
+
+          <article class="card">
+            <span class="section-kicker">Status ringkas</span>
+            <div class="metric-grid">
+              <div class="metric"><span>Engine</span><strong id="homeEngineStatus">Memuat…</strong></div>
+              <div class="metric"><span>Recovery</span><strong id="homeRecoveryCount">—</strong></div>
+              <div class="metric"><span>Session</span><strong id="homeSessionState">—</strong></div>
+              <div class="metric"><span>Source</span><strong>Local</strong></div>
+            </div>
+          </article>
+
+          <article id="homeLatestSession" class="card">
+            <span class="section-kicker">Pekerjaan terakhir</span>
+            <h3 id="homeLatestGoal">Belum ada pekerjaan</h3>
+            <p id="homeLatestState" class="muted">Session baru akan muncul setelah pekerjaan dimulai.</p>
+            <button class="text-button" type="button" data-view-jump="work">Buka Work →</button>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="card-heading">
+            <div>
+              <span class="section-kicker">Activity Trail</span>
+              <h3>Aktivitas terbaru</h3>
+            </div>
+            <button class="text-button" type="button" data-view-jump="activity">Lihat semua</button>
+          </div>
+          <div id="homeActivityList" class="activity-list">
+            <div class="empty-state">Belum ada aktivitas.</div>
+          </div>
+        </article>
+      </section>
+
+      <section id="view-work" class="view" data-view-panel="work" hidden>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">WORK</p>
+            <h2>Jalankan pekerjaan dengan kontrol penuh</h2>
+            <p class="muted">Setiap mutasi penting berhenti pada keputusan manusia.</p>
+          </div>
+          <span id="workState" class="pill">Belum ada session</span>
+        </div>
+
+        <article class="card work-summary">
+          <div>
+            <span class="section-kicker">Pekerjaan</span>
+            <h3 id="workGoal">Belum ada pekerjaan aktif</h3>
+            <p id="workProject" class="muted">Project —</p>
+          </div>
+          <div id="workSessionMeta" class="compact-meta">Session —</div>
+        </article>
+
+        <article class="card">
+          <div class="card-heading">
+            <div>
+              <span class="section-kicker">Progress</span>
+              <h3>Alur pekerjaan</h3>
+            </div>
+            <span class="pill">Source asli terlindungi</span>
+          </div>
+          <ol id="workTimeline" class="work-timeline">
+            <li data-stage="prepare"><span>1</span><div><strong>Memahami project</strong><small>Preflight dan verifier</small></div></li>
+            <li data-stage="worker"><span>2</span><div><strong>Memilih worker</strong><small>Rekomendasi + konfirmasi</small></div></li>
+            <li data-stage="sandbox"><span>3</span><div><strong>Sandbox</strong><small>Persetujuan terisolasi</small></div></li>
+            <li data-stage="execute"><span>4</span><div><strong>Eksekusi</strong><small>Worker berjalan lokal</small></div></li>
+            <li data-stage="verify"><span>5</span><div><strong>Verification</strong><small>Hasil diperiksa</small></div></li>
+            <li data-stage="review"><span>6</span><div><strong>Review</strong><small>Apply / Discard</small></div></li>
+          </ol>
+        </article>
+
+        <div class="work-grid">
+          <article id="workerPanel" class="card decision-card">
+            <span class="section-kicker">Worker</span>
+            <h3 id="workerName">Menunggu rekomendasi</h3>
+            <p id="workerReason" class="muted">XP akan menampilkan worker yang direkomendasikan dan alasannya.</p>
+            <div class="decision-actions">
+              <button id="workerDeclineButton" class="button button-danger-ghost" type="button">Batal</button>
+              <button id="workerConfirmButton" class="button button-primary" type="button">Gunakan worker</button>
+            </div>
+          </article>
+
+          <article class="card decision-card">
+            <span class="section-kicker">Sandbox</span>
+            <h3>Izinkan eksekusi terisolasi?</h3>
+            <p class="muted">Perubahan dikerjakan di copy terisolasi. Source project asli belum berubah.</p>
+            <div class="decision-actions">
+              <button id="sandboxDeclineButton" class="button button-danger-ghost" type="button">Tolak</button>
+              <button id="sandboxApproveButton" class="button button-primary" type="button">Izinkan sandbox</button>
+            </div>
+          </article>
+        </div>
+
+        <article class="card execution-card">
+          <div>
+            <span class="section-kicker">Eksekusi</span>
+            <h3>Siap menjalankan worker</h3>
+            <p id="executionHint" class="muted">Worker hanya dapat berjalan setelah approval worker dan sandbox selesai.</p>
+          </div>
+          <button id="executeButton" class="button button-primary" type="button">Jalankan</button>
+        </article>
+
+        <article id="reviewPanel" class="card review-card">
+          <div class="card-heading">
+            <div>
+              <span class="section-kicker">Review</span>
+              <h3>Hasil siap diperiksa</h3>
+            </div>
+            <span id="reviewStatus" class="pill">Belum tersedia</span>
+          </div>
+          <p id="reviewSummary" class="muted">Verification harus PASS sebelum Apply tersedia.</p>
+          <div class="review-grid">
+            <div>
+              <h4>File berubah</h4>
+              <ul id="changedFiles" class="file-list"><li>Belum ada perubahan.</li></ul>
+            </div>
+            <div>
+              <h4>Preview perubahan</h4>
+              <pre id="diffPreview" class="diff-preview">Belum ada diff untuk ditampilkan.</pre>
+            </div>
+          </div>
+          <div class="review-actions">
+            <button id="discardButton" class="button button-danger-ghost" type="button">Buang hasil</button>
+            <button id="applyButton" class="button button-primary" type="button">Terapkan</button>
+          </div>
+        </article>
+      </section>
+
+      <section id="view-projects" class="view" data-view-panel="projects" hidden>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">PROJECTS</p>
+            <h2>Pilih project yang ingin dikerjakan</h2>
+            <p class="muted">XP hanya menjalankan pekerjaan pada project yang Anda pilih.</p>
+          </div>
+        </div>
+        <article class="card">
+          <label class="field-label" for="projectSearch">Cari project</label>
+          <input id="projectSearch" type="search" placeholder="Cari nama, branch, atau ID project">
+          <div id="projectList" class="project-list">
+            <div class="empty-state">Memuat daftar project…</div>
+          </div>
+        </article>
+      </section>
+
+      <section id="view-activity" class="view" data-view-panel="activity" hidden>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">ACTIVITY</p>
+            <h2>Activity Trail</h2>
+            <p class="muted">Hanya aksi, sumber, processor, dan hasil yang benar-benar terjadi. Hidden reasoning tidak ditampilkan.</p>
+          </div>
+          <label class="compact-field" for="activityFilter">
+            Filter
+            <select id="activityFilter">
+              <option value="all">Semua</option>
+              <option value="Selesai">Selesai</option>
+              <option value="Perlu perhatian">Perlu perhatian</option>
+              <option value="Gagal">Gagal</option>
+            </select>
+          </label>
+        </div>
+        <article class="card">
+          <div id="activityList" class="activity-list">
+            <div class="empty-state">Belum ada aktivitas.</div>
+          </div>
+        </article>
+      </section>
+
+      <section id="view-settings" class="view" data-view-panel="settings" hidden>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">SETTINGS</p>
+            <h2>Konfigurasi dan kebijakan XP</h2>
+            <p class="muted">CP-09C menampilkan setting operasional. Guardrail keselamatan tidak dapat dimatikan dari halaman ini.</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <article id="settingsCapabilities" class="card">
+            <span class="section-kicker">AI & Worker</span>
+            <h3>Capabilities</h3>
+            <div id="capabilityList" class="settings-list"><div>Memuat…</div></div>
+          </article>
+
+          <article id="settingsRecovery" class="card">
+            <span class="section-kicker">Recovery</span>
+            <h3>Recovery</h3>
+            <p><strong id="settingsRecoveryCount">—</strong> recovery point tersedia.</p>
+            <p class="muted">Recovery tetap dikelola engine XP Next.</p>
+          </article>
+
+          <article id="settingsPolicy" class="card">
+            <span class="section-kicker">Safety policy</span>
+            <h3>Kebijakan wajib</h3>
+            <ul class="policy-list">
+              <li><strong>Human approval</strong><span>Wajib untuk keputusan penting</span></li>
+              <li><strong>Sandbox</strong><span>Wajib sebelum worker memodifikasi project</span></li>
+              <li><strong>No silent fallback</strong><span>Worker/AI tidak berganti diam-diam</span></li>
+              <li><strong>Apply reviewed only</strong><span>Source asli berubah hanya setelah review</span></li>
+            </ul>
+          </article>
+
+          <article id="settingsGateway" class="card">
+            <span class="section-kicker">System</span>
+            <h3>Gateway lokal</h3>
+            <div class="settings-list">
+              <div><span>Akses</span><strong>Loopback only</strong></div>
+              <div><span>Origin</span><strong id="settingsOrigin">—</strong></div>
+              <div><span>PWA</span><strong id="settingsPwa">Aktif</strong></div>
+              <div><span>API</span><strong>/api/v2</strong></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        Expert XP · PWA-first · local governed execution · Activity Trail without hidden reasoning
+      </footer>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="/app.js" defer></script>
 </body>
 </html>

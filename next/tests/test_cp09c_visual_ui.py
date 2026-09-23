@@ -169,5 +169,93 @@ class CP09CVisualGatewayTests(unittest.TestCase):
             harness.close()
 
 
+
+class CP09CStaticShellTests(unittest.TestCase):
+    def setUp(self):
+        root = _default_visual_static_root()
+        assert isinstance(root, Path)
+        self.root = root
+        self.html = (root / "index.html").read_text(encoding="utf-8")
+        self.css = (root / "styles.css").read_text(encoding="utf-8")
+        self.manifest = json.loads(
+            (root / "manifest.webmanifest").read_text(encoding="utf-8")
+        )
+
+    def test_primary_navigation_and_views_exist(self):
+        for label in ("Home", "Work", "Projects", "Activity", "Settings"):
+            self.assertIn(f">{label}<", self.html)
+        for view_id in (
+            "view-home",
+            "view-work",
+            "view-projects",
+            "view-activity",
+            "view-settings",
+        ):
+            self.assertIn(f'id="{view_id}"', self.html)
+
+    def test_home_contains_primary_composer_and_status_surfaces(self):
+        for element_id in (
+            "homeGoal",
+            "homeStartButton",
+            "activeProjectCard",
+            "homeLatestSession",
+            "homeActivityList",
+            "globalStatus",
+        ):
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn("Apa yang ingin Anda kerjakan?", self.html)
+        self.assertIn('aria-live="polite"', self.html)
+
+    def test_work_view_contains_all_governed_decision_controls(self):
+        for element_id in (
+            "workState",
+            "workTimeline",
+            "workerPanel",
+            "workerConfirmButton",
+            "workerDeclineButton",
+            "sandboxApproveButton",
+            "sandboxDeclineButton",
+            "executeButton",
+            "reviewPanel",
+            "changedFiles",
+            "diffPreview",
+            "applyButton",
+            "discardButton",
+        ):
+            self.assertIn(f'id="{element_id}"', self.html)
+        self.assertIn("Buang hasil", self.html)
+        self.assertIn("Terapkan", self.html)
+
+    def test_projects_activity_and_settings_have_complete_surfaces(self):
+        for element_id in (
+            "projectList",
+            "projectSearch",
+            "activityList",
+            "activityFilter",
+            "settingsCapabilities",
+            "settingsRecovery",
+            "settingsPolicy",
+            "settingsGateway",
+        ):
+            self.assertIn(f'id="{element_id}"', self.html)
+        for text_value in (
+            "Human approval",
+            "Sandbox",
+            "No silent fallback",
+            "Recovery",
+        ):
+            self.assertIn(text_value, self.html)
+
+    def test_visual_system_is_light_responsive_and_manifest_is_standalone(self):
+        self.assertIn("--surface:", self.css)
+        self.assertIn("--accent:", self.css)
+        self.assertIn("@media", self.css)
+        self.assertIn(".sidebar", self.css)
+        self.assertIn(".view", self.css)
+        self.assertEqual(self.manifest["display"], "standalone")
+        self.assertEqual(self.manifest["start_url"], "/")
+        self.assertEqual(self.manifest["scope"], "/")
+
+
 if __name__ == "__main__":
     unittest.main()
