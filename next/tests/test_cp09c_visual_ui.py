@@ -294,5 +294,48 @@ class CP09CAppReadModelTests(unittest.TestCase):
             self.assertIn(f"function {name}", self.js)
 
 
+
+class CP09CWorkActionTests(unittest.TestCase):
+    def setUp(self):
+        root = _default_visual_static_root()
+        assert isinstance(root, Path)
+        self.js = (root / "app.js").read_text(encoding="utf-8")
+
+    def test_all_governed_mutation_endpoints_are_wired(self):
+        for path in (
+            "/api/v2/projects/select",
+            "/api/v2/work-sessions",
+            "/worker-decision",
+            "/sandbox-decision",
+            "/execute",
+            "/review-decision",
+        ):
+            self.assertIn(path, self.js)
+
+    def test_workflow_functions_exist(self):
+        for name in (
+            "renderWork",
+            "startWorkSession",
+            "selectProject",
+            "decideWorker",
+            "decideSandbox",
+            "executeWork",
+            "decideReview",
+            "handleMutationError",
+        ):
+            self.assertIn(f"function {name}", self.js)
+
+    def test_mutations_carry_revision_and_review_fingerprint(self):
+        self.assertIn("expected_revision", self.js)
+        self.assertIn("change_fingerprint", self.js)
+        self.assertIn("fingerprint", self.js)
+        self.assertNotIn("verifier_command", self.js)
+
+    def test_stale_mutation_is_reloaded_not_retried(self):
+        self.assertIn("error.status === 409", self.js)
+        self.assertIn("await loadAll()", self.js)
+        self.assertNotIn("retryMutation", self.js)
+
+
 if __name__ == "__main__":
     unittest.main()
