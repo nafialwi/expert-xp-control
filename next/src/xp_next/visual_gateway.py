@@ -6,10 +6,12 @@ import json
 import mimetypes
 from pathlib import Path
 import secrets
+import threading
 from typing import Any
 from urllib.parse import unquote, urlparse
 
 from .state_store import JobNotFound, ProjectNotFound, StateStoreError
+from .work_flow import WorkFlowNeedsAttention
 from .work_session import WorkSessionSnapshot, public_session
 from .zero_cost_e2e import ReviewAction
 
@@ -57,6 +59,7 @@ class XPVisualGateway(ThreadingHTTPServer):
         self.static_root = static_root
         self.bind_host = bind_host
         self.session_nonce = secrets.token_urlsafe(32)
+        self.service_lock = threading.RLock()
         super().__init__(address, handler)
 
     @property
@@ -274,7 +277,9 @@ class _GatewayHandler(BaseHTTPRequestHandler):
                 self._serve_root()
                 return
             if path.startswith("/api/"):
-                if self._api_get(path):
+                with self.server.service_lock:
+                    handled = self._api_get(path)
+                if handled:
                     return
                 self._send_json(
                     404,
@@ -422,10 +427,11 @@ class _GatewayHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             payload = self._read_json()
-            status, result = self._dispatch_post(
-                parsed.path,
-                payload,
-            )
+            with self.server.service_lock:
+                status, result = self._dispatch_post(
+                    parsed.path,
+                    payload,
+                )
             if isinstance(result, dict):
                 body = result
             else:
@@ -442,6 +448,11 @@ class _GatewayHandler(BaseHTTPRequestHandler):
             status = 404 if "not found" in str(exc).lower() else 409
             self._send_json(
                 status,
+                {"ok": False, "error": str(exc)[:300]},
+            )
+        except WorkFlowNeedsAttention as exc:
+            self._send_json(
+                409,
                 {"ok": False, "error": str(exc)[:300]},
             )
         except (TypeError, ValueError):

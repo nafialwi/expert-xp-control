@@ -69,7 +69,10 @@ class StateStore:
     def __init__(self, path: Path | str):
         self.path = Path(path).expanduser()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.connection = sqlite3.connect(str(self.path))
+        self.connection = sqlite3.connect(
+            str(self.path),
+            check_same_thread=False,
+        )
         self.connection.row_factory = sqlite3.Row
         initialize_schema(self.connection)
 
