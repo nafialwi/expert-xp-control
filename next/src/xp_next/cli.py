@@ -41,6 +41,11 @@ def _print(data: object) -> None:
     print(json.dumps(data, ensure_ascii=False, sort_keys=True))
 
 
+def _default_visual_static_root() -> Path | None:
+    root = Path(__file__).resolve().parents[3] / "web" / "xp_visual"
+    return root if root.is_dir() else None
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="xp-next")
     parser.add_argument(
@@ -535,7 +540,7 @@ def _work_command(args: argparse.Namespace) -> int:
 def _visual_gateway_command(args: argparse.Namespace) -> int:
     workers = _build_local_workers(args)
 
-    static_root = args.static_root
+    static_root = args.static_root or _default_visual_static_root()
 
     with XPRuntime.open(args.home) as runtime:
         projects = ProjectService(runtime.store)

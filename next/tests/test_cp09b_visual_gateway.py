@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 from http.cookies import SimpleCookie
 
-from xp_next.cli import build_parser, main
+from xp_next.cli import _default_visual_static_root, build_parser, main
 from xp_next.job_state import JobState
 from xp_next.state_store import StateStoreError
 from xp_next.work_session import WorkSessionSnapshot
@@ -255,7 +255,10 @@ class CP09BVisualGatewayTests(unittest.TestCase):
         kwargs = make_gateway.call_args.kwargs
         self.assertEqual(kwargs["host"], "127.0.0.1")
         self.assertEqual(kwargs["port"], 0)
-        self.assertIsNone(kwargs["static_root"])
+        self.assertEqual(
+            kwargs["static_root"],
+            _default_visual_static_root(),
+        )
         self.assertEqual(
             type(kwargs["service"]).__name__,
             "WorkSessionService",

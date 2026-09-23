@@ -8,7 +8,7 @@ from pathlib import Path
 import secrets
 import threading
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .state_store import JobNotFound, ProjectNotFound, StateStoreError
 from .work_flow import WorkFlowNeedsAttention
@@ -243,7 +243,7 @@ class _GatewayHandler(BaseHTTPRequestHandler):
         )
         return True
 
-    def _api_get(self, path: str) -> bool:
+    def _api_get(self, path: str, query: str = "") -> bool:
         service = self.server.service
         if path == "/api/v2/snapshot":
             self._send_json(
@@ -255,6 +255,29 @@ class _GatewayHandler(BaseHTTPRequestHandler):
             self._send_json(
                 200,
                 {"projects": list(service.list_visual_projects())},
+            )
+            return True
+        if path == "/api/v2/activity":
+            params = parse_qs(query, keep_blank_values=True)
+            raw_limit = params.get("limit", ["50"])[-1]
+            limit = int(raw_limit)
+            if limit < 1 or limit > 50:
+                raise ValueError("activity limit must be between 1 and 50")
+            raw_job_id = params.get("job_id", [None])[-1]
+            job_id = None
+            if raw_job_id is not None:
+                normalized = str(raw_job_id).strip()
+                job_id = normalized or None
+            self._send_json(
+                200,
+                {
+                    "activities": list(
+                        service.public_activity(
+                            job_id,
+                            limit=limit,
+                        )
+                    )
+                },
             )
             return True
         prefix = "/api/v2/work-sessions/"
@@ -284,7 +307,7 @@ class _GatewayHandler(BaseHTTPRequestHandler):
                 return
             if path.startswith("/api/"):
                 with self.server.service_lock:
-                    handled = self._api_get(path)
+                    handled = self._api_get(path, parsed.query)
                 if handled:
                     return
                 self._send_json(
@@ -305,6 +328,11 @@ class _GatewayHandler(BaseHTTPRequestHandler):
             self._send_json(
                 status,
                 {"ok": False, "error": str(exc)[:300]},
+            )
+        except (TypeError, ValueError):
+            self._send_json(
+                400,
+                {"ok": False, "error": "invalid request"},
             )
         except Exception:
             self._send_json(
