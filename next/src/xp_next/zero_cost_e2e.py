@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from .apply_control import (
+    ApplyGuardError,
     ApplyResult,
     ApplyStatus,
     apply_reviewed_sandbox,
@@ -80,6 +81,18 @@ class ZeroCostE2EResult:
             "sandbox_root": self.sandbox_root,
             "recovery_ref": self.recovery_ref,
         }
+
+
+@dataclass(frozen=True)
+class PendingReviewResult:
+    job_id: str
+    project_id: str
+    reasoning_status: str
+    plan_status: str
+    worker_status: str
+    sandbox_root: str
+    expected_original_head: str
+    review: ReviewBundle
 
 
 ReviewDecider = Callable[[ReviewBundle], HumanReviewDecision]
@@ -158,7 +171,7 @@ class ZeroCostE2EService:
             recovery_ref=recovery_ref,
         )
 
-    def run(
+    def execute_existing_to_review(
         self,
         *,
         job_id: str,
@@ -166,91 +179,30 @@ class ZeroCostE2EService:
         goal: str,
         worker_prompt: str,
         verifier_specs: tuple[VerifierSpec, ...],
-        sandbox_write_approval: HumanApproval,
-        review_decider: ReviewDecider,
-        max_reasoning_tokens: int = 96,
         worker_selection: WorkerSelection | None = None,
         worker_confirmation: WorkerConfirmation | None = None,
-    ) -> ZeroCostE2EResult:
+        max_reasoning_tokens: int = 96,
+    ) -> PendingReviewResult | ZeroCostE2EResult:
+        if not verifier_specs:
+            raise ValueError("CP-09B requires at least one explicit verifier")
+        if not worker_prompt.strip():
+            raise ValueError("worker_prompt must not be empty")
         if (worker_selection is None) != (worker_confirmation is None):
             raise ValueError(
                 "worker_selection and worker_confirmation must be supplied together"
             )
-        if not verifier_specs:
-            raise ValueError("CP-08A requires at least one explicit verifier")
-        if not worker_prompt.strip():
-            raise ValueError("worker_prompt must not be empty")
+
+        job = self.store.get_job(job_id)
+        if JobState(str(job["state"])) is not JobState.AWAITING_APPROVAL:
+            raise ValueError("job must be awaiting approval before execution")
 
         project = self.store.get_project(project_id)
+        if str(job["project_id"]) != project_id:
+            raise ValueError("job belongs to another project")
         source_root = Path(str(project["root_path"])).expanduser().resolve(strict=True)
-
-        self.store.create_job(job_id, project_id, goal, risk="write")
-        self.store.transition_job(job_id, JobState.PLANNING)
 
         expected_worker_backend: str | None = None
         if worker_selection is not None and worker_confirmation is not None:
-            selection_backend = worker_selection.backend_id or "none"
-            resources = worker_selection.resource_snapshot
-            self.store.record_activity(
-                f"{job_id}:activity:worker-selection",
-                job_id=job_id,
-                category="worker_selection",
-                action="recommend_worker",
-                status=(
-                    "Selesai"
-                    if worker_selection.backend_id is not None
-                    else "Perlu perhatian"
-                ),
-                summary=(
-                    f"{worker_selection.status.value}: backend={selection_backend}; "
-                    f"{worker_selection.detail}; "
-                    f"memory_mb={resources.available_memory_mb}; "
-                    f"logical_cpus={resources.logical_cpus}"
-                ),
-                source="local_resource_and_capability_policy",
-                processor="xp_next_worker_selector",
-                live=False,
-            )
-
-            confirmed = worker_confirmation.status is ConfirmationStatus.CONFIRMED
-            self.store.record_approval(
-                f"{job_id}:approval:worker",
-                job_id=job_id,
-                approval_class="worker_selection",
-                granted=confirmed,
-            )
-            self.store.record_activity(
-                f"{job_id}:activity:worker-confirmation",
-                job_id=job_id,
-                category="approval",
-                action="confirm_worker",
-                status=(
-                    "Selesai"
-                    if confirmed
-                    else (
-                        "Gagal"
-                        if worker_confirmation.status is ConfirmationStatus.DECLINED
-                        else "Perlu perhatian"
-                    )
-                ),
-                summary=worker_confirmation.detail,
-                source="human",
-                processor="xp_next_worker_selector",
-                live=False,
-            )
-
-            if worker_confirmation.status is ConfirmationStatus.DECLINED:
-                self.store.transition_job(job_id, JobState.CANCELLED)
-                return self._result(
-                    job_id=job_id,
-                    reasoning_status="NOT_RUN",
-                    plan_status="NOT_RUN",
-                    worker_status="NOT_RUN",
-                    review_status=None,
-                    apply_status=None,
-                    sandbox_root=None,
-                    recovery_ref=None,
-                )
             if (
                 worker_confirmation.status is not ConfirmationStatus.CONFIRMED
                 or worker_confirmation.backend_id is None
@@ -302,12 +254,15 @@ class ZeroCostE2EService:
                 sandbox_root=None,
                 recovery_ref=None,
             )
+
         worker_backend = str(getattr(worker_ready, "backend_id", "worker"))
         capabilities = {
             "local_qwen": {
                 "state": "READY" if qwen_ready.ready else "NEEDS_ATTENTION",
                 "version": getattr(self.reasoner, "model", None),
-                "network_used": bool(getattr(qwen_ready, "external_network_used", False)),
+                "network_used": bool(
+                    getattr(qwen_ready, "external_network_used", False)
+                ),
             },
             worker_backend: {
                 "state": "READY" if worker_ready.ready else "NEEDS_ATTENTION",
@@ -387,7 +342,11 @@ class ZeroCostE2EService:
             2,
             category="ai",
             action="local_reasoning",
-            status="Selesai" if reasoning.status is ReasoningStatus.COMPLETED else "Perlu perhatian",
+            status=(
+                "Selesai"
+                if reasoning.status is ReasoningStatus.COMPLETED
+                else "Perlu perhatian"
+            ),
             summary=f"Local reasoning backend status: {reasoning.status.value}.",
             source="local_loopback",
             processor="local_qwen",
@@ -434,25 +393,10 @@ class ZeroCostE2EService:
                 recovery_ref=None,
             )
 
-        self.store.transition_job(job_id, JobState.READY)
-        self.store.transition_job(job_id, JobState.AWAITING_APPROVAL)
-        self.store.record_approval(
-            f"{job_id}:approval:sandbox",
-            job_id=job_id,
-            approval_class="sandbox_write",
-            granted=sandbox_write_approval.granted,
-        )
-        self._activity(
-            job_id,
-            4,
-            category="approval",
-            action="sandbox_write",
-            status="Selesai" if sandbox_write_approval.granted else "Gagal",
-            summary="Explicit human decision recorded for isolated sandbox write.",
-            source="human",
-        )
-        if not sandbox_write_approval.granted:
-            self.store.transition_job(job_id, JobState.CANCELLED)
+        source_identity = dict(context.get("source_identity", {}))
+        expected_head = str(source_identity.get("head") or "")
+        if not expected_head:
+            self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
             return self._result(
                 job_id=job_id,
                 reasoning_status=reasoning.status.value,
@@ -485,8 +429,15 @@ class ZeroCostE2EService:
             5,
             category="worker",
             action=f"isolated_{worker_backend}",
-            status="Selesai" if worker_result.status is WorkerStatus.COMPLETED else "Perlu perhatian",
-            summary=worker_result.detail or f"Worker status: {worker_result.status.value}.",
+            status=(
+                "Selesai"
+                if worker_result.status is WorkerStatus.COMPLETED
+                else "Perlu perhatian"
+            ),
+            summary=(
+                worker_result.detail
+                or f"Worker status: {worker_result.status.value}."
+            ),
             source="isolated_workspace",
             processor=worker_backend,
         )
@@ -513,7 +464,11 @@ class ZeroCostE2EService:
             6,
             category="verification",
             action="sandbox_review",
-            status="Selesai" if review.status is ReviewStatus.PASS else "Perlu perhatian",
+            status=(
+                "Selesai"
+                if review.status is ReviewStatus.PASS
+                else "Perlu perhatian"
+            ),
             summary=review.summary,
             source="isolated_workspace",
             processor="xp_next_verifier",
@@ -532,148 +487,409 @@ class ZeroCostE2EService:
             )
 
         self.store.transition_job(job_id, JobState.READY_TO_REVIEW)
-        decision = review_decider(review)
-        if decision.approved_change_fingerprint != review.change_fingerprint:
-            self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
+        return PendingReviewResult(
+            job_id=job_id,
+            project_id=project_id,
+            reasoning_status=reasoning.status.value,
+            plan_status=plan.status.value,
+            worker_status=worker_result.status.value,
+            sandbox_root=str(isolated.project),
+            expected_original_head=expected_head,
+            review=review,
+        )
+
+    def finalize_existing_review(
+        self,
+        *,
+        pending: PendingReviewResult,
+        decision: HumanReviewDecision,
+        verifier_specs: tuple[VerifierSpec, ...],
+    ) -> ZeroCostE2EResult:
+        job = self.store.get_job(pending.job_id)
+        if JobState(str(job["state"])) is not JobState.READY_TO_REVIEW:
+            raise ValueError("job is not ready for review")
+        if not verifier_specs:
+            raise ValueError("CP-09B requires at least one explicit verifier")
+
+        project = self.store.get_project(pending.project_id)
+        source_root = Path(str(project["root_path"])).expanduser().resolve(strict=True)
+
+        try:
+            fresh = build_review_bundle(
+                pending.sandbox_root,
+                verifier_specs=verifier_specs,
+            )
+        except Exception:
+            self.store.transition_job(pending.job_id, JobState.NEEDS_ATTENTION)
+            return self._result(
+                job_id=pending.job_id,
+                reasoning_status=pending.reasoning_status,
+                plan_status=pending.plan_status,
+                worker_status=pending.worker_status,
+                review_status=None,
+                apply_status=None,
+                sandbox_root=pending.sandbox_root,
+                recovery_ref=None,
+            )
+
+        if (
+            fresh.status is not ReviewStatus.PASS
+            or fresh.change_fingerprint != pending.review.change_fingerprint
+            or decision.approved_change_fingerprint != fresh.change_fingerprint
+        ):
+            self.store.transition_job(pending.job_id, JobState.NEEDS_ATTENTION)
             self._activity(
-                job_id,
+                pending.job_id,
                 7,
                 category="review",
                 action="human_review",
                 status="Perlu perhatian",
-                summary="Human decision fingerprint did not match the reviewed change.",
+                summary=(
+                    "Human decision or current sandbox no longer matches "
+                    "the reviewed change."
+                ),
                 source="human",
             )
             return self._result(
-                job_id=job_id,
-                reasoning_status=reasoning.status.value,
-                plan_status=plan.status.value,
-                worker_status=worker_result.status.value,
-                review_status=review.status.value,
+                job_id=pending.job_id,
+                reasoning_status=pending.reasoning_status,
+                plan_status=pending.plan_status,
+                worker_status=pending.worker_status,
+                review_status=fresh.status.value,
                 apply_status=None,
-                sandbox_root=str(isolated.project),
+                sandbox_root=pending.sandbox_root,
                 recovery_ref=None,
             )
 
         is_apply = decision.action is ReviewAction.APPLY
         self.store.record_approval(
-            f"{job_id}:approval:apply",
-            job_id=job_id,
+            f"{pending.job_id}:approval:apply",
+            job_id=pending.job_id,
             approval_class="apply_original",
             granted=is_apply,
         )
         self._activity(
-            job_id,
+            pending.job_id,
             7,
             category="review",
             action="human_review",
             status="Selesai",
-            summary=f"Explicit human review decision recorded: {decision.action.value}.",
+            summary=(
+                f"Explicit human review decision recorded: "
+                f"{decision.action.value}."
+            ),
             source="human",
         )
 
-        source_identity = dict(context.get("source_identity", {}))
-        expected_head = str(source_identity.get("head") or "")
-        if not expected_head:
-            self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
-            return self._result(
-                job_id=job_id,
-                reasoning_status=reasoning.status.value,
-                plan_status=plan.status.value,
-                worker_status=worker_result.status.value,
-                review_status=review.status.value,
-                apply_status=None,
-                sandbox_root=str(isolated.project),
-                recovery_ref=None,
-            )
-
         if decision.action is ReviewAction.DISCARD:
-            discarded = discard_reviewed_sandbox(
-                original_root=source_root,
-                sandbox_root=isolated.project,
-                approved_review=review,
-                verifier_specs=verifier_specs,
-                expected_original_head=expected_head,
-            )
-            self.store.transition_job(job_id, JobState.CANCELLED)
+            try:
+                discarded = discard_reviewed_sandbox(
+                    original_root=source_root,
+                    sandbox_root=pending.sandbox_root,
+                    approved_review=fresh,
+                    verifier_specs=verifier_specs,
+                    expected_original_head=pending.expected_original_head,
+                )
+            except ApplyGuardError:
+                self.store.transition_job(
+                    pending.job_id,
+                    JobState.NEEDS_ATTENTION,
+                )
+                return self._result(
+                    job_id=pending.job_id,
+                    reasoning_status=pending.reasoning_status,
+                    plan_status=pending.plan_status,
+                    worker_status=pending.worker_status,
+                    review_status=fresh.status.value,
+                    apply_status=None,
+                    sandbox_root=pending.sandbox_root,
+                    recovery_ref=None,
+                )
+
+            self.store.transition_job(pending.job_id, JobState.CANCELLED)
             self._activity(
-                job_id,
+                pending.job_id,
                 8,
                 category="apply",
                 action="discard",
                 status="Selesai",
-                summary="Reviewed sandbox discarded; original project remained unchanged.",
+                summary=(
+                    "Reviewed sandbox discarded; original project remained "
+                    "unchanged."
+                ),
                 source="local",
                 processor="xp_next_apply_control",
             )
             return self._result(
-                job_id=job_id,
-                reasoning_status=reasoning.status.value,
-                plan_status=plan.status.value,
-                worker_status=worker_result.status.value,
-                review_status=review.status.value,
+                job_id=pending.job_id,
+                reasoning_status=pending.reasoning_status,
+                plan_status=pending.plan_status,
+                worker_status=pending.worker_status,
+                review_status=fresh.status.value,
                 apply_status=discarded.status.value,
-                sandbox_root=str(isolated.project),
+                sandbox_root=pending.sandbox_root,
                 recovery_ref=None,
             )
 
-        self.store.transition_job(job_id, JobState.APPLYING)
-        applied: ApplyResult = apply_reviewed_sandbox(
-            original_root=source_root,
-            sandbox_root=isolated.project,
-            approved_review=review,
-            verifier_specs=verifier_specs,
-            expected_original_head=expected_head,
-            recovery_parent=self.paths.artifacts / "recovery",
-            recovery_id=f"{job_id}-apply",
-        )
+        self.store.transition_job(pending.job_id, JobState.APPLYING)
+        try:
+            applied: ApplyResult = apply_reviewed_sandbox(
+                original_root=source_root,
+                sandbox_root=pending.sandbox_root,
+                approved_review=fresh,
+                verifier_specs=verifier_specs,
+                expected_original_head=pending.expected_original_head,
+                recovery_parent=self.paths.artifacts / "recovery",
+                recovery_id=f"{pending.job_id}-apply",
+            )
+        except ApplyGuardError:
+            self.store.transition_job(
+                pending.job_id,
+                JobState.NEEDS_ATTENTION,
+            )
+            return self._result(
+                job_id=pending.job_id,
+                reasoning_status=pending.reasoning_status,
+                plan_status=pending.plan_status,
+                worker_status=pending.worker_status,
+                review_status=fresh.status.value,
+                apply_status=None,
+                sandbox_root=pending.sandbox_root,
+                recovery_ref=None,
+            )
+
         if applied.recovery_ref:
             self.store.record_recovery_point(
-                f"{job_id}:recovery:apply",
-                project_id=project_id,
+                f"{pending.job_id}:recovery:apply",
+                project_id=pending.project_id,
                 source_ref=applied.recovery_ref,
-                job_id=job_id,
+                job_id=pending.job_id,
             )
 
         self._activity(
-            job_id,
+            pending.job_id,
             8,
             category="apply",
             action="apply_reviewed_change",
-            status="Selesai" if applied.status is ApplyStatus.APPLIED else "Perlu perhatian",
+            status=(
+                "Selesai"
+                if applied.status is ApplyStatus.APPLIED
+                else "Perlu perhatian"
+            ),
             summary=applied.detail,
             source="local_project",
             processor="xp_next_apply_control",
         )
 
         if applied.status is ApplyStatus.ROLLED_BACK:
-            self.store.transition_job(job_id, JobState.ROLLED_BACK)
+            self.store.transition_job(pending.job_id, JobState.ROLLED_BACK)
         elif applied.status is ApplyStatus.NEEDS_ATTENTION:
-            self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
+            self.store.transition_job(
+                pending.job_id,
+                JobState.NEEDS_ATTENTION,
+            )
         elif applied.status is ApplyStatus.APPLIED:
-            self.store.transition_job(job_id, JobState.VERIFYING_APPLIED)
+            self.store.transition_job(
+                pending.job_id,
+                JobState.VERIFYING_APPLIED,
+            )
             if applied.post_verify_status != "PASS":
-                self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
+                self.store.transition_job(
+                    pending.job_id,
+                    JobState.NEEDS_ATTENTION,
+                )
             else:
                 self._activity(
-                    job_id,
+                    pending.job_id,
                     9,
                     category="verification",
                     action="post_apply_verify",
                     status="Selesai",
-                    summary="Post-Apply verifier passed against the original project.",
+                    summary=(
+                        "Post-Apply verifier passed against the original "
+                        "project."
+                    ),
                     source="local_project",
                     processor="xp_next_verifier",
                 )
-                self.store.transition_job(job_id, JobState.COMPLETED)
+                self.store.transition_job(
+                    pending.job_id,
+                    JobState.COMPLETED,
+                )
 
         return self._result(
-            job_id=job_id,
-            reasoning_status=reasoning.status.value,
-            plan_status=plan.status.value,
-            worker_status=worker_result.status.value,
-            review_status=review.status.value,
+            job_id=pending.job_id,
+            reasoning_status=pending.reasoning_status,
+            plan_status=pending.plan_status,
+            worker_status=pending.worker_status,
+            review_status=fresh.status.value,
             apply_status=applied.status.value,
-            sandbox_root=str(isolated.project),
+            sandbox_root=pending.sandbox_root,
             recovery_ref=applied.recovery_ref,
+        )
+
+
+    def run(
+        self,
+        *,
+        job_id: str,
+        project_id: str,
+        goal: str,
+        worker_prompt: str,
+        verifier_specs: tuple[VerifierSpec, ...],
+        sandbox_write_approval: HumanApproval,
+        review_decider: ReviewDecider,
+        max_reasoning_tokens: int = 96,
+        worker_selection: WorkerSelection | None = None,
+        worker_confirmation: WorkerConfirmation | None = None,
+    ) -> ZeroCostE2EResult:
+        if (worker_selection is None) != (worker_confirmation is None):
+            raise ValueError(
+                "worker_selection and worker_confirmation must be supplied together"
+            )
+        if not verifier_specs:
+            raise ValueError("CP-08A requires at least one explicit verifier")
+        if not worker_prompt.strip():
+            raise ValueError("worker_prompt must not be empty")
+
+        project = self.store.get_project(project_id)
+        Path(str(project["root_path"])).expanduser().resolve(strict=True)
+
+        self.store.create_job(job_id, project_id, goal, risk="write")
+        self.store.transition_job(job_id, JobState.PLANNING)
+
+        if worker_selection is not None and worker_confirmation is not None:
+            selection_backend = worker_selection.backend_id or "none"
+            resources = worker_selection.resource_snapshot
+            self.store.record_activity(
+                f"{job_id}:activity:worker-selection",
+                job_id=job_id,
+                category="worker_selection",
+                action="recommend_worker",
+                status=(
+                    "Selesai"
+                    if worker_selection.backend_id is not None
+                    else "Perlu perhatian"
+                ),
+                summary=(
+                    f"{worker_selection.status.value}: backend={selection_backend}; "
+                    f"{worker_selection.detail}; "
+                    f"memory_mb={resources.available_memory_mb}; "
+                    f"logical_cpus={resources.logical_cpus}"
+                ),
+                source="local_resource_and_capability_policy",
+                processor="xp_next_worker_selector",
+                live=False,
+            )
+
+            confirmed = (
+                worker_confirmation.status is ConfirmationStatus.CONFIRMED
+            )
+            self.store.record_approval(
+                f"{job_id}:approval:worker",
+                job_id=job_id,
+                approval_class="worker_selection",
+                granted=confirmed,
+            )
+            self.store.record_activity(
+                f"{job_id}:activity:worker-confirmation",
+                job_id=job_id,
+                category="approval",
+                action="confirm_worker",
+                status=(
+                    "Selesai"
+                    if confirmed
+                    else (
+                        "Gagal"
+                        if worker_confirmation.status
+                        is ConfirmationStatus.DECLINED
+                        else "Perlu perhatian"
+                    )
+                ),
+                summary=worker_confirmation.detail,
+                source="human",
+                processor="xp_next_worker_selector",
+                live=False,
+            )
+
+            if worker_confirmation.status is ConfirmationStatus.DECLINED:
+                self.store.transition_job(job_id, JobState.CANCELLED)
+                return self._result(
+                    job_id=job_id,
+                    reasoning_status="NOT_RUN",
+                    plan_status="NOT_RUN",
+                    worker_status="NOT_RUN",
+                    review_status=None,
+                    apply_status=None,
+                    sandbox_root=None,
+                    recovery_ref=None,
+                )
+            if (
+                worker_confirmation.status is not ConfirmationStatus.CONFIRMED
+                or worker_confirmation.backend_id is None
+                or worker_selection.backend_id
+                != worker_confirmation.backend_id
+            ):
+                self.store.transition_job(job_id, JobState.NEEDS_ATTENTION)
+                return self._result(
+                    job_id=job_id,
+                    reasoning_status="NOT_RUN",
+                    plan_status="NOT_RUN",
+                    worker_status="NOT_RUN",
+                    review_status=None,
+                    apply_status=None,
+                    sandbox_root=None,
+                    recovery_ref=None,
+                )
+
+        self.store.transition_job(job_id, JobState.READY)
+        self.store.transition_job(job_id, JobState.AWAITING_APPROVAL)
+        self.store.record_approval(
+            f"{job_id}:approval:sandbox",
+            job_id=job_id,
+            approval_class="sandbox_write",
+            granted=sandbox_write_approval.granted,
+        )
+        self._activity(
+            job_id,
+            4,
+            category="approval",
+            action="sandbox_write",
+            status="Selesai" if sandbox_write_approval.granted else "Gagal",
+            summary=(
+                "Explicit human decision recorded for isolated sandbox write."
+            ),
+            source="human",
+        )
+        if not sandbox_write_approval.granted:
+            self.store.transition_job(job_id, JobState.CANCELLED)
+            return self._result(
+                job_id=job_id,
+                reasoning_status="NOT_RUN",
+                plan_status="NOT_RUN",
+                worker_status="NOT_RUN",
+                review_status=None,
+                apply_status=None,
+                sandbox_root=None,
+                recovery_ref=None,
+            )
+
+        pending = self.execute_existing_to_review(
+            job_id=job_id,
+            project_id=project_id,
+            goal=goal,
+            worker_prompt=worker_prompt,
+            verifier_specs=verifier_specs,
+            worker_selection=worker_selection,
+            worker_confirmation=worker_confirmation,
+            max_reasoning_tokens=max_reasoning_tokens,
+        )
+        if isinstance(pending, ZeroCostE2EResult):
+            return pending
+
+        decision = review_decider(pending.review)
+        return self.finalize_existing_review(
+            pending=pending,
+            decision=decision,
+            verifier_specs=verifier_specs,
         )
