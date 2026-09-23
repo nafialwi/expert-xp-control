@@ -629,6 +629,53 @@ class WorkSessionService:
             for name, value in capabilities_raw.items()
         }
 
+        try:
+            reasoner_ready = self.reasoner.readiness()
+            reasoner_id = str(
+                getattr(reasoner_ready, "backend_id", "local_qwen")
+            )
+            capabilities[reasoner_id] = {
+                "state": (
+                    "READY"
+                    if bool(getattr(reasoner_ready, "ready", False))
+                    else "NEEDS_ATTENTION"
+                ),
+                "version": getattr(self.reasoner, "model", None),
+                "network_used": bool(
+                    getattr(
+                        reasoner_ready,
+                        "external_network_used",
+                        False,
+                    )
+                ),
+            }
+        except Exception:
+            capabilities["local_qwen"] = {
+                "state": "NEEDS_ATTENTION",
+                "version": getattr(self.reasoner, "model", None),
+                "network_used": False,
+            }
+
+        for worker in self.workers.values():
+            try:
+                worker_ready = worker.readiness()
+                worker_id = str(
+                    getattr(worker_ready, "backend_id", "")
+                ).strip()
+                if not worker_id:
+                    continue
+                capabilities[worker_id] = {
+                    "state": (
+                        "READY"
+                        if bool(getattr(worker_ready, "ready", False))
+                        else "NEEDS_ATTENTION"
+                    ),
+                    "version": getattr(worker, "model", None),
+                    "network_used": False,
+                }
+            except Exception:
+                continue
+
         return {
             "product": "XP Next",
             "active_project": (

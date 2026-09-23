@@ -567,6 +567,14 @@ class WorkSessionServiceTests(unittest.TestCase):
                 self.assertEqual(snapshot["active_project"]["id"], "fixture")
                 self.assertEqual(snapshot["latest_session"]["id"], "visual-1")
                 self.assertIn("capabilities", snapshot)
+                self.assertEqual(
+                    snapshot["capabilities"]["local_qwen"]["state"],
+                    "READY",
+                )
+                self.assertEqual(
+                    snapshot["capabilities"]["lightweight_local"]["state"],
+                    "READY",
+                )
                 rendered = json.dumps(snapshot)
                 self.assertNotIn("worker_prompt", rendered)
                 self.assertNotIn("PRIVATE_PROMPT", rendered)
