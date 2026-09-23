@@ -337,5 +337,18 @@ class CP09CWorkActionTests(unittest.TestCase):
         self.assertNotIn("retryMutation", self.js)
 
 
+
+class CP09CServiceWorkerTests(unittest.TestCase):
+    def setUp(self):
+        root = _default_visual_static_root()
+        assert isinstance(root, Path)
+        self.sw = (root / "sw.js").read_text(encoding="utf-8")
+
+    def test_service_worker_never_caches_any_api_v2_or_future_api_path(self):
+        self.assertIn('url.pathname.startsWith("/api/")', self.sw)
+        self.assertIn('event.request.method !== "GET"', self.sw)
+        self.assertIn("cache.addAll", self.sw)
+
+
 if __name__ == "__main__":
     unittest.main()
